@@ -13,6 +13,7 @@
 		let strokeColor = [255/255, 0/255, 0/255, 1];
 		let strokeWidth = 1.0;
 		let aVertexPosition;
+		let aVertexIndex;
 		let gl = {'id':attr.id};
 		let canvas = {'id':'canvas2'};
 		var view = new Matrix();
@@ -21,9 +22,13 @@
 		let layercounter = 0;
 
 		let shaders = {
+			// Todo:
+			//		- Add sprites for highlighted version
+			// 		- Also set a highlighted uPointSize
 			'sprite': {
 				'vertex': {'src':`
 					attribute vec2 aVertexPosition;	// position of sprite
+					attribute float aVertexIndex;	// id of the sprite
 					uniform mat3 uMatrix;
 					uniform float uPointSize;
 					uniform bool uYLog;
@@ -44,7 +49,13 @@
 							//else posV.y = -2.0;
 						}
 						gl_Position = vec4(posV, 0.1, 1);
-						gl_PointSize = uPointSize;
+
+						// To do: send a boolean into the fragment shader to say if the point is highlighted or not
+						if(aVertexIndex == 8.0){
+							gl_PointSize = 0.0;
+						}else{
+							gl_PointSize = uPointSize;
+						}
 					}`
 				},
 				'fragment':	{'src':`
@@ -57,9 +68,13 @@
 					}`
 				}
 			},
+			// Todo:
+			//		- Set highlighted uColor
+			// 		- Set highlighted uPointSize
 			'point': {
 				'vertex': {'src':`
 					attribute vec2 aVertexPosition;	// position of point
+					attribute float aVertexIndex;	// id of the point
 					uniform mat3 uMatrix;
 					uniform float uPointSize;
 					uniform bool uYLog;
@@ -80,7 +95,13 @@
 							//else posV.y = -2.0;
 						}
 						gl_Position = vec4(posV, 0.1, 1);
-						gl_PointSize = uPointSize;
+						
+						// To do: send a boolean into the fragment shader to say if the point is highlighted or not
+						if(aVertexIndex == 10.0){
+							gl_PointSize = uPointSize*10.0;
+						}else{
+							gl_PointSize = uPointSize;
+						}
 					}`
 				},
 				'fragment':	{'src':`
@@ -93,10 +114,14 @@
 					}`
 				}
 			},
+			// Todo:
+			//		- Set highlighted uColor
+			// 		- Set highlighted uSize
 			'thickline': {
 				'vertex': {'src':`
 					attribute vec2 aVertexPosition;	// position of vertex
 					attribute vec2 aNormalPosition;	// position of normal
+					attribute float aVertexIndex;	// id of the line
 					uniform mat3 uMatrix;
 					uniform bool uYLog;
 					uniform float uYLogMin;
@@ -126,6 +151,7 @@
 						if(uYaxis) posV.y = (aVertexPosition.y == 0.0 ? -1.0 : 1.0);
 
 						gl_Position = vec4(posV.x + posN.x * scale_x, posV.y + posN.y * scale_y, 1.0, 1.0);
+						if(aVertexIndex == 10.0){}
 					}`
 				},
 				'fragment':	{'src':`
@@ -138,15 +164,19 @@
 					}`
 				}
 			},
+			// Todo:
+			//		- Set highlighted uColor
 			'thinline': {
 				'vertex': {'src':`
 					attribute vec2 aVertexPosition;	// position of vertex
+					attribute float aVertexIndex;	// id of the line
 					uniform mat3 uMatrix;
 					vec2 posV;
 
 					void main() {
 						posV = (uMatrix * vec3(aVertexPosition, 1)).xy;
 						gl_Position = vec4(posV, 1.0, 1);
+						if(aVertexIndex == 10.0){}
 					}`
 				},
 				'fragment':	{'src':`
@@ -159,9 +189,12 @@
 					}`
 				}
 			},
+			// Todo:
+			//		- Set highlighted uColor
 			'area': {
 				'vertex': {'src':`
 					attribute vec2 aVertexPosition;	// position of vertex
+					attribute float aVertexIndex;	// id of the area
 					uniform mat3 uMatrix;
 					uniform bool uYLog;
 					uniform float uYLogMin;
@@ -171,6 +204,7 @@
 					void main() {
 						posV = (uMatrix * vec3(aVertexPosition, 1)).xy;
 						gl_Position = vec4(posV, 1.0, 1);
+						if(aVertexIndex == 10.0){}
 					}`
 				},
 				'fragment':	{'src':`
@@ -213,7 +247,7 @@
 			}
 			gl.ctx = WebGLDebugUtils.makeDebugContext(gl.canvas.getContext("webgl"),throwOnGLError,logAndValidate);
 			*/
-			gl.ctx = gl.canvas.getContext("webgl",{ premultipliedAlpha: false });
+			gl.ctx = gl.canvas.getContext("webgl",{ premultipliedAlpha: true });
 			this.log.time('getContext webgl');
 			let s,n,i,t,a;
 
@@ -327,18 +361,34 @@
 					// Get the uniform locations
 					l.loc = getProgramUniforms(gl, l.program);
 
-					// Create a buffer and bind it
-					l.buffer = gl.ctx.createBuffer();
-					gl.ctx.bindBuffer(gl.ctx.ARRAY_BUFFER, l.buffer);
 
 					// Create the vertices using the appropriate function
 					l.vertex = primitives[p].fn.call(this,data);
 
+
+					// Create a buffer and bind it
+					l.buffer = gl.ctx.createBuffer();
+					gl.ctx.bindBuffer(gl.ctx.ARRAY_BUFFER, l.buffer);
 					// Set the buffer data
 					gl.ctx.bufferData(gl.ctx.ARRAY_BUFFER, l.vertex.data, gl.ctx.STATIC_DRAW);
 
+
 					// Unbind the buffer
 					gl.ctx.bindBuffer(gl.ctx.ARRAY_BUFFER, null);
+
+
+
+					// Create a buffer and bind it
+					l.bufferIndex = gl.ctx.createBuffer();
+					gl.ctx.bindBuffer(gl.ctx.ARRAY_BUFFER, l.bufferIndex);
+					// Set the buffer data
+					gl.ctx.bufferData(gl.ctx.ARRAY_BUFFER, l.vertex.indices, gl.ctx.STATIC_DRAW);
+
+
+					// Unbind the buffer
+					gl.ctx.bindBuffer(gl.ctx.ARRAY_BUFFER, null);
+
+
 
 					// Create sprite
 					if(l.shader=="sprite" || l.shader=="point"){
@@ -500,6 +550,13 @@
 							gl.ctx.vertexAttribPointer(aNormalPosition, layers[n].vertex.components, gl.ctx.FLOAT, false, 0, layers[n].vertex.count * 8);
 							gl.ctx.enableVertexAttribArray(aNormalPosition);
 						}
+
+						gl.ctx.bindBuffer(gl.ctx.ARRAY_BUFFER, layers[n].bufferIndex);
+						
+						aVertexIndex = gl.ctx.getAttribLocation(layers[n].program, "aVertexIndex");
+						gl.ctx.vertexAttribPointer(aVertexIndex, 1, gl.ctx.FLOAT, false, 0, 0);
+						gl.ctx.enableVertexAttribArray(aVertexIndex);
+				
 						layers[n].inititated;
 					}
 
@@ -551,14 +608,19 @@
 		return this;
 	}
 
+	/*
+	 Create data structures
+	*/
 	function makePoints(original){
 		var vertices = new Float32Array(original.length*2);
+		var ids = new Float32Array(original.length);
 		for(i = 0; i < original.length ; i++){
 			// Build point-based vertices
 			vertices[i*2] = original[i].x;
 			vertices[i*2 + 1] = original[i].y;
+			ids[i] = i;
 		}
-		return {'data':vertices,'components':2, 'count':original.length, 'type': 'POINTS' };
+		return {'data':vertices, 'indices':ids, 'components':2, 'count':original.length, 'type': 'POINTS' };
 	}
 	function makeBoundaries(o){
 		var areas = [];
@@ -595,6 +657,7 @@
 			// Break the lines
 			if(a < areas.length - 1) v.push({'x':null,'y':null});
 		}
+
 		return makeThickLines(v);
 	}
 	function makeAreas(o){
@@ -624,7 +687,10 @@
 				}
 			}
 		}
-		return { 'data': new Float32Array(vertices), 'components': 2, 'count': vertices.length/2, 'type':'TRIANGLES' };
+		var ids = new Array(vertices.length/2);
+		for(i = 0; i < ids.length; i++) ids[i] = 0;
+
+		return { 'data': new Float32Array(vertices), 'indices': new Float32Array(ids), 'components': 2, 'count': vertices.length/2, 'type':'TRIANGLES' };
 	}
 	function makeThickLines(original){
 		// TR: compute normal vector
@@ -671,7 +737,11 @@
 				v.push(0.);
 			}
 		}
-		return {'data':new Float32Array(v),'components':2,'count': 4 * (l - 1), 'type': 'TRIANGLE_STRIP' };
+		
+		var ids = new Array(v.length/2);
+		for(i = 0; i < ids.length; i++) ids[i] = 0;
+
+		return {'data':new Float32Array(v), 'indices': new Float32Array(ids), 'components':2,'count': 4 * (l - 1), 'type': 'TRIANGLE_STRIP' };
 	}
 	function makeThinLines(o){
 		var l = o.length;
@@ -707,10 +777,15 @@
 				}
 			}
 		}
-		return {'data':new Float32Array(v), 'components':2, 'count': v.length/2, 'type':t };
+
+		var ids = new Array(v.length/2);
+		for(i = 0; i < ids.length; i++) ids[i] = 0;
+
+		return {'data':new Float32Array(v), 'indices': new Float32Array(ids), 'components':2, 'count': v.length/2, 'type':t };
 	}
 	function makeRectAreas(o){
 		var vertices = [];
+		var ids = [];
 		var a,p;
 	
 		// To do: make the polygon lookup processing more efficient by
@@ -718,11 +793,14 @@
 		for(a = 0; a < o.length ; a++){
 			p = o[a];
 			vertices = vertices.concat([p.x1,p.y1,p.x1,p.y2,p.x2,p.y1,p.x1,p.y2,p.x2,p.y2,p.x2,p.y1]);
+			ids = ids.concat([a,a,a,a,a,a]);
 		}
-		return { 'data': new Float32Array(vertices), 'components': 2, 'count': vertices.length/2, 'type':'TRIANGLES' };
+		
+		return { 'data': new Float32Array(vertices), 'indices': new Float32Array(ids), 'components': 2, 'count': vertices.length/2, 'type':'TRIANGLES' };
 	}
 	function makeRectLines(o){
 		var v = [];
+		var ids = [];
 		for(i = 0; i < o.length;i++){
 			if(typeof o[i].x==="number"){
 				v.push({'x':o[i].x,'y':o[i].y1});
@@ -733,6 +811,9 @@
 				v.push({'x':o[i].x2,'y':o[i].y});
 				v.push({'x':null,'y':null});
 			}
+			ids.push(i);
+			ids.push(i);
+			ids.push(i);
 		}
 		return makeThickLines(v);
 	}
