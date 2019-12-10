@@ -213,7 +213,7 @@
 			}
 			gl.ctx = WebGLDebugUtils.makeDebugContext(gl.canvas.getContext("webgl"),throwOnGLError,logAndValidate);
 			*/
-			gl.ctx = gl.canvas.getContext("webgl");
+			gl.ctx = gl.canvas.getContext("webgl",{ premultipliedAlpha: false });
 			this.log.time('getContext webgl');
 			let s,n,i,t,a;
 
@@ -433,7 +433,7 @@
 		layerList.setAttribute('class','key');
 		document.getElementsByClassName(attr.key)[0].appendChild(layerList);
 
-		this.draw = function(){
+		this.draw = function(screenshot){
 
 			let scale = [currentScale[0],currentScale[1]];
 			// Define the viewport area in pixels (x,y,w,h)
@@ -506,7 +506,30 @@
 					gl.ctx.drawArrays(gl.ctx[layers[n].vertex.type], 0, layers[n].vertex.count);
 				}
 			}
+
+			if(screenshot){
+				var pixels = new Uint8Array(gl.canvas.clientWidth * gl.canvas.clientHeight * 4);
+				gl.ctx.readPixels(0, 0, gl.canvas.clientWidth, gl.canvas.clientHeight, gl.ctx.RGBA, gl.ctx.UNSIGNED_BYTE, pixels);
+				return pixels;
+			}
 		
+			return this;
+		}
+		
+		this.screenshot = function(){
+			var pixels = this.draw(true);
+
+			var canvas = document.getElementById('screenshot');
+			var ctx = canvas.getContext('2d');
+			const w = gl.canvas.clientWidth, h = gl.canvas.clientHeight;
+			ctx.clearRect(0,0,w,h);
+			
+			Array.from({length: h}, (val, i) => pixels.slice(i * w * 4, (i + 1) * w * 4)).forEach((val, i) => pixels.set(val, (h - i - 1) * w * 4));
+
+			var myImageData = new ImageData(Uint8ClampedArray.from(pixels),w,h);
+
+			ctx.putImageData(myImageData, 0, 0);
+
 			return this;
 		}
 
@@ -535,7 +558,7 @@
 			vertices[i*2] = original[i].x;
 			vertices[i*2 + 1] = original[i].y;
 		}
-		return {'data':vertices,'components':2, 'count':original.length/2, 'type': 'POINTS' };
+		return {'data':vertices,'components':2, 'count':original.length, 'type': 'POINTS' };
 	}
 	function makeBoundaries(o){
 		var areas = [];
