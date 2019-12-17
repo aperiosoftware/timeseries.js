@@ -17,7 +17,7 @@
 	 */
 	function TimeSeriesMaster(){
 
-		this.version = "0.0.26";
+		this.version = "0.1.0";
 		this.length = 0;
 
 		/**
@@ -834,7 +834,7 @@
 						w = parseInt(p.find('canvas').css('width'));
 						h = parseInt(p.find('canvas').css('height'));
 						ctx = c.getContext('2d');
-						scale = window.devicePixelRatio;
+						scale = Math.max(2,window.devicePixelRatio);
 						c.width = w*scale;
 						c.height = h*scale;
 						ctx.scale(scale,scale);
@@ -848,42 +848,24 @@
 							if(d.include){
 								k.css({'background-color':'none'});
 								// Set the canvas style
-								this.graph.setCanvasStyles(ctx,d.mark[0]);
+								attr = this.graph.setCanvasStyles(ctx,d.mark[0]);
 								// Draw the different types
 								if(d.type=="symbol"){
-									this.graph.drawShape(clone(d.mark[0]),{'ctx':ctx,'x':w/2,'y':h/2});
+									this.graph.drawIcon(d.mark[0].props.symbol.shape,{'ctx':ctx,'datum':d.mark[0],'x':w/2,'y':h/2,'size':Math.sqrt(d.mark[0].props.format.size) || 4,'style':attr});
 								}else if(d.type=="rect"){
-									if(d.mark[0].props.x1 && d.mark[0].props.x2 && d.mark[0].props.y1 && d.mark[0].props.y2){
-										// If this has x1,x2,y1,y2 it is more like an area
-										this.graph.drawRect(clone(d.mark[0]),{'ctx':ctx,'x1':0,'y1':0,'x2':w,'y2':h});
-									}else{
-										// We probably just have x1,x2,y or x,y1,y2 so this is more like a line
-										this.graph.drawRect(clone(d.mark[0]),{'ctx':ctx,'x1':w/2,'y1':0,'x2':w/2,'y2':h});
-									}
+									// Dummy attributes to simulate a thin line
+									attr.lineWidth = 1;
+									attr.strokeStyle = attr.fillStyle;
+									this.graph.drawIcon("stroke-vertical",{'ctx':ctx,'datum':d.mark[0],'x':w/2,'y':h/2,'size':h,'style':attr})
 								}else if(d.type=="area"){
-									this.graph.drawRect(clone(d.mark[0]),{'ctx':ctx,'x1':0,'y1':0,'x2':w,'y2':h});
+									this.graph.drawIcon("square",{'ctx':ctx,'size':w});
 								}else if(d.type=="line"){
-									ctx.beginPath();
-									ctx.moveTo(0,h/2);
-									ctx.lineTo(w,h/2);
-									ctx.lineWidth = (d.encode.enter.strokeWidth.value||0.8);
-									ctx.stroke();
+									this.graph.drawIcon("stroke",{'ctx':ctx,'size':w,'style':attr});
 								}else if(d.type=="rule"){
-									ctx.beginPath();
-									ctx.lineWidth = (d.encode.enter.strokeWidth.value||1);
-									if(!d.data[0].x2) d.data[0].x2 = clone(d.data[0].x);
-									if(!d.data[0].y2) d.data[0].y2 = clone(d.data[0].y);
-									if(d.data[0].y.value == d.data[0].y2.value){
-										ctx.moveTo(0,h/2 + 0.5);
-										ctx.lineTo(w,h/2 + 0.5);
-									}else if(d.data[0].x.value == d.data[0].x2.value){
-										ctx.moveTo(w/2 + 0.5,0);
-										ctx.lineTo(w/2 + 0.5,h);
-									}else{
-										ctx.moveTo(0,0);
-										ctx.lineTo(w,h);
-									}
-									ctx.stroke();
+									if(d.data[0].y.value == d.data[0].y2.value) shape = "stroke";
+									else if(d.data[0].x.value == d.data[0].x2.value) shape = "stroke-vertical";
+									else shape = "m-0.5,-0.5 l 1,1";
+									this.graph.drawIcon(shape,{'ctx':ctx,'datum':d.mark[0],'x':w/2,'y':h/2,'size':h,'style':attr})
 								}else if(d.type=="text"){
 									this.graph.drawTextLabel("T",w/2,h/2,{'ctx':ctx,'format':{'align':'center','baseline':'middle'}});
 								}

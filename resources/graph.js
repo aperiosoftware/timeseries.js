@@ -1474,21 +1474,30 @@
 	 */
 	Graph.prototype.setCanvasStyles = function(ctx,datum){
 		if(!datum) return this;
-		var f = datum.props.format;
-		var fill = (typeof f.fill==="string" ? f.fill : (typeof f.fill==="number" ? this.colours[f.fill % this.colours.length]:'#000000'));
-		if(datum.props.format.fillOpacity) fill = hex2rgba(fill,f.fillOpacity);
-		ctx.fillStyle = fill;
-		var stroke = (typeof f.stroke==="string" ? f.stroke : (typeof f.stroke==="number" ? this.colours[f.stroke % this.colours.length]:'#000000'));
-		if(f.strokeOpacity) stroke = hex2rgba(stroke,f.strokeOpacity);
-		ctx.strokeStyle = stroke;
-		ctx.lineWidth = (typeof f.strokeWidth==="number" ? f.strokeWidth : 0.8);
-		ctx.lineCap = (f.strokeCap || "square");
-		ctx.lineJoin = "bevel";	// To stop spikes occurring in certain regimes
-		ctx.setLineDash(f.strokeDash ? f.strokeDash : [1,0]);
-		if(f.fontSize) ctx.font = buildFont(f);
-		if(f.baseline) ctx.textBaseline = f.baseline;
-		if(f.align) ctx.textAlign = f.align;
-		return this;
+		var a,f;
+		f = datum.props.format;
+		a = {};
+		a.fillStyle = (typeof f.fill==="string" ? f.fill : (typeof f.fill==="number" ? this.colours[f.fill % this.colours.length]:'#000000'));
+		if(f.fillOpacity) a.fillStyle = hex2rgba(a.fillStyle,f.fillOpacity);
+		a.strokeStyle = (typeof f.stroke==="string" ? f.stroke : (typeof f.stroke==="number" ? this.colours[f.stroke % this.colours.length]:'#000000'));
+		if(f.strokeOpacity) a.strokeStyle = hex2rgba(a.strokeStyle,f.strokeOpacity);
+		a.lineWidth = (typeof f.strokeWidth==="number" ? f.strokeWidth : 0.8);
+		a.lineCap = (f.strokeCap || "square");
+		a.lineJoin = "bevel"; // To stop spikes occurring in certain regimes
+		a.strokeDash = f.strokeDash ? f.strokeDash : [1,0];
+		if(f.fontSize) a.font = buildFont(f);
+		if(f.baseline) a.textBaseline = f.baseline;
+		if(f.align) a.textAlign = f.align;
+		ctx.fillStyle = a.fillStyle;
+		ctx.strokeStyle = a.strokeStyle;
+		ctx.lineWidth = a.lineWidth;
+		ctx.lineCap = a.lineCap;
+		ctx.lineJoin = a.lineJoin;	// To stop spikes occurring in certain regimes
+		ctx.setLineDash(a.strokeDash);
+		if(a.font) ctx.font = a.font;
+		if(a.textBaseline) ctx.textBaseline = a.textBaseline;
+		if(a.textAlign) ctx.textAlign = a.textAlign;
+		return a;
 	};
 
 	/**
@@ -2925,89 +2934,21 @@
 	 */
 	Graph.prototype.drawShape = function(datum,attr){
 		if(!attr.ctx) attr.ctx = this.paper.data.ctx;
-		var ctx,p,x1,y1,s,w,h,o,dw,s2;
+		var ctx,p,x1,y1;
 		ctx = attr.ctx;
 		p = datum.props;
 
-		x1 = (typeof attr.x==="number") ? attr.x : p.x;
-		y1 = (typeof attr.y==="number") ? attr.y : p.y;
+		x1 = (typeof attr.x==="number" ? attr.x : p.x);
+		y1 = (typeof attr.y==="number" ? attr.y : p.y);
 
-		ctx.moveTo(x1,y1);
-		ctx.beginPath();
+		Icon(p.symbol.shape,{'size':(Math.sqrt(p.format.size) || 4),'ctx':attr.ctx,'x':x1,'y':y1});
 
-		var shape = p.symbol.shape;
-
-		w = s = h = (Math.sqrt(p.format.size) || 4);
-		s2 = s*2;
-
-		// Bail out if the symbol is off the chart
-		if(x1+s2 < 0 || x1-s2 > this.chart.left+this.chart.width || y1+s2 < 0 || y1-s2 > this.chart.top+this.chart.height) return {};
-
-		function m(a,b){ ctx.moveTo(x1+a,y1+b); }
-		function l(a,b){ ctx.lineTo(x1+a,y1+b); }
-
-		if(shape=="circle"){
-			ctx.arc(x1,y1,(s/2 || 4),0,Math.PI*2,false);
-		}else if(shape=="rect"){
-			w = p.format.width || s;
-			h = p.format.height || w;
-			if(p.x2) w = p.x2-p.x1;
-			else if(p.width && p.x){ w = p.width; x1 = p.x - p.width/2; }
-			else if(p.width && p.xc){ w = p.width; x1 = p.xc - p.width/2; }
-			else{ x1 = x1 - w/2; }
-
-			if(p.y2) h = p.y2-p.y1;
-			else if(p.height && p.y){ h = p.height; y1 = p.y - p.height/2; }
-			else if(p.height && p.yc){ h = p.height; y1 = p.yc - p.height/2; }
-			else{ y1 = y1 - h/2; }
-
-			ctx.rect(x1,y1,w,h);
-		}else if(shape=="cross"){
-			dw = w/6;
-			m(dw,dw);
-			l(dw*3,dw);
-			l(dw*3,-dw);
-			l(dw,-dw);
-			l(dw,-dw*3);
-			l(-dw,-dw*3);
-			l(-dw,-dw);
-			l(-dw*3,-dw);
-			l(-dw*3,dw);
-			l(-dw,dw);
-			l(-dw,dw*3);
-			l(dw,dw*3);
-		}else if(shape=="diamond"){
-			w *= Math.sqrt(2)/2;
-			m(0,w);
-			l(w,0);
-			l(0,-w);
-			l(-w,0);
-		}else if(shape=="triangle-up"){
-			w /= 3;
-			m(0,-w*1.5);
-			l(w*2,w*1.5);
-			l(-w*2,w*1.5);
-		}else if(shape=="triangle-down"){
-			w /=3;
-			m(0,w*1.5);
-			l(w*2,-w*1.5);
-			l(-w*2,-w*1.5);
-		}else if(shape=="triangle-left"){
-			w /= 3;
-			m(w*1.5,w*1.5);
-			l(w*1.5,-w*1.5);
-			l(-w*1.5,0);
-		}else if(shape=="triangle-right"){
-			w /= 3;
-			m(-w*1.5,w*1.5);
-			l(-w*1.5,-w*1.5);
-			l(w*1.5,0);
-		}
-		ctx.fill();
-		if(p.format.strokeWidth > 0) ctx.stroke();
-		o = {'id':datum.id,'xa':Math.floor(x1-w/2),'xb':Math.ceil(x1+w/2),'ya':Math.floor(y1-h/2),'yb':Math.ceil(y1+h/2)};
-		return o;
+		return this;
 	};
+
+	Graph.prototype.drawIcon = function(typ,attr){
+		return Icon(typ,attr);
+	}
 
 	/**
 	 * @desc Clear the canvas
@@ -3540,6 +3481,238 @@
 		return poly;
 	}
 
+	/**
+	 * @desc Create a Matrix object
+	 * @param {array} m - a 3x3 matrix (stored in a flat array)
+	 */
+	function Matrix(m){
+		this.type = "matrix";
+		identity = [1,0,0,0,1,0,0,0,1];
+		if(m) this.v = m;
+		else this.v = identity;
+
+		this.setIdentity = function(){
+			this.v = identity;
+			return this;
+		}
+		this.translate = function(tx,ty){
+			this.v = this.multiply([1,0,0,0,1,0,tx,ty,1]);
+			return this;
+		}
+		this.scale = function(sx, sy){
+			this.v = this.multiply([sx,0,0,0,sy,0,0,0,1]);
+			return this;
+		}
+		this.multiply = function(m){
+			if(m.length == 3 && typeof m[0]==="number"){
+				// Point
+				return [(m[0]*this.v[0]) + (m[1]*this.v[3]) + (m[2]*this.v[6]), (m[0]*this.v[1]) + (m[1]*this.v[4]) + (m[2]*this.v[7]), (m[0]*this.v[2]) + (m[1]*this.v[5]) + (m[2]*this.v[8])];
+			}else{
+				// Multiply each column by the matrix
+				var r0 = this.multiply([m[0], m[3], m[6]]);
+				var r1 = this.multiply([m[1], m[4], m[7]]);
+				var r2 = this.multiply([m[2], m[5], m[8]]);
+				// Turn the result columns back into a single matrix
+				return [r0[0],r1[0],r2[0],r0[1],r1[1],r2[1],r0[2],r1[2],r2[2]];
+			}
+		}
+		return this;
+	}
+
+	/**
+	 * @desc Create a Path object
+	 * @param {string} path - a string defining a path
+	 */
+	function Path(path){
+		this.path = path;
+		this.p = path;
+		this.size = 1;
+		this.off = 0;
+
+		if(typeof path==="string"){
+			this.path = path;
+			this.p = path.match(/[A-Za-z][^A-Za-z]*/g)
+			for(var i = 0; i < this.p.length; i++){
+				bits = [];
+				this.p[i].replace(/ $/,"").replace(/^([A-Za-z]) ?(.*)$/,function(m,p1,p2){ bits = [p1,p2]; return ""; });
+				this.p[i] = bits;
+				if(this.p[i][1]){
+					this.p[i] = [this.p[i][0]].concat(this.p[i][1].split(/ /));
+					for(var j = 1; j < this.p[i].length; j++){
+						this.p[i][j] = this.p[i][j].split(/\,/);
+						for(var k = 0; k < this.p[i][j].length; k++) this.p[i][j][k] = parseFloat(this.p[i][j][k]);
+					}
+				}else this.p[i].splice(1,1);
+			}
+		}
+		this.setOrigin = function(x,y){
+			this.o = {'x':x,'y':y};
+			return this;
+		};
+		this.setSize = function(s){
+			this.size = s;
+			return this;
+		};
+		this.draw = function(ctx){
+			var x,y,first,t,size,i,uc;
+			x = 0;
+			y = 0;
+			first;
+			t = "";
+			size = this.size;
+			// Change origin
+			if(this.o){
+				x = this.o.x;
+				y = this.o.y;
+				ctx.moveTo(x,y);
+			}
+			for(i = 0; i < this.p.length; i++){
+				t = this.p[i][0];
+				uc = (this.p[i][0]==this.p[i][0].toUpperCase());
+				if(this.p[i].length > 1){
+					for(var j = 1; j < this.p[i].length; j++){
+						if(t=="m" || t=="l"){ x += this.p[i][j][0]*size; y += this.p[i][j][1]*size; }
+						else if(t=="M" || t=="L"){ x = this.p[i][j][0]*0.5*size + this.o.x; y = this.p[i][j][1]*0.5*size + this.o.y; }
+						else if(t=="h") x += this.p[i][j][0]*size;
+						else if(t=="H") x = this.p[i][j][0]*0.5*size + this.o.x;
+						else if(t=="v") y += this.p[i][j][0]*size;
+						else if(t=="V") y = this.p[i][j][0]*0.5*size + this.o.y;
+						if(t.toLowerCase()=="m") ctx.moveTo(x,y);
+						else ctx.lineTo(x,y);
+						if(!first) first = {'x':x,'y':y};
+					}
+				}else{
+					if(t=="Z") ctx.lineTo(first.x,first.y);
+				}
+			}
+			return this;
+		}
+		this.toString = function(){
+			var str = '';
+			var size = this.size;
+			for(var i = 0; i < this.p.length; i++){
+				str += (i>0 ? ' ':'')+this.p[i][0];
+				uc = (this.p[i][0]==this.p[i][0].toUpperCase());
+				for(var j = 1; j < this.p[i].length; j++){
+					str += ' ';
+					if(typeof this.p[i][j]==="number") str += this.p[i][j]*(uc ? 0.5 : 1)*size+(uc ? this.o.x : 0);
+					else{
+						for(var k = 0; k < this.p[i][j].length; k++){
+							if(k > 0) str += ',';
+							if(typeof this.p[i][j][k]=="number") str += this.p[i][j][k]*(uc ? 0.5 : 1)*size+(uc ? this.o.x : 0);
+						}
+					}
+				}
+			}
+			if(this.o) str = 'M '+this.o.x+' '+this.o.y+' '+str;
+			return str;
+		}
+		this.svg = function(attr){
+			if(!attr) attr = {};
+			if(!attr.width) attr.width = 32;
+			if(!attr.height) attr.height = 32;
+			var svg = '<svg width="'+attr.width+'" height="'+attr.height+'"	viewBox="0 0 '+attr.width+' '+attr.height+'" xmlns="http://www.w3.org/2000/svg"';
+			if(attr.overflow) svg += ' style="overflow:visible"';
+			svg += '><path d="'+this.toString()+'"'+(attr.fillStyle ? ' fill="'+attr.fillStyle+'"':'')+(attr.strokeStyle ? ' stroke="'+attr.strokeStyle+'"':'')+(attr.strokeWidth ? ' stroke-width="'+attr.strokeWidth+'"':'')+' />'
+			svg += '</svg>';
+			return svg;
+		}
+		return this;
+	}
+	/**
+	 * @desc Create an Icon
+	 * @param {string} shape - either a defined name or a string defining a path
+	 * @param {object} attr - an object defining the icon
+	 * @param {number} attr.width - the icon width
+	 * @param {number} attr.height - the icon height
+	 * @param {number} attr.size - the icon width/height
+	 * @param {number} attr.lineWidth - the line width
+	 * @param {number} attr.fillStyle - the fill colour
+	 * @param {number} attr.strokeWidth - the stroke width
+	 */
+	function Icon(shape,attr){
+
+		function setWH(p,w,h,s){
+			p.width = w;
+			p.height = h;
+			p.scale = s;
+			p.c.width = Math.round(w*s);
+			p.c.height = Math.round(h*s);
+			p.ctx = p.c.getContext('2d');
+			p.ctx.scale(s,s);
+			return p;
+		}
+		
+		if(!attr) attr = {};
+		var paper,w,h,cx,cy,dw,path,stroke,fill;
+		w = attr.width || attr.size;
+		h = attr.height || attr.size;
+		stroke = false;
+		fill = true;
+
+		if(attr.ctx){
+			paper = {'ctx':attr.ctx};
+		}else{
+			// Set properties of the temporary canvas
+			paper = setWH({ 'c': document.createElement('canvas') },w,h,window.devicePixelRatio);
+			paper.ctx.clearRect(0,0,w,h);
+		}
+		if(!attr.style) attr.style = {};
+		if(!attr.style.lineWidth) attr.style.lineWidth = 0;
+
+		if(attr.style.fillStyle) paper.ctx.fillStyle = attr.style.fillStyle;
+		if(attr.style.strokeStyle) paper.ctx.strokeStyle = attr.style.strokeStyle;
+		paper.ctx.lineWidth = attr.style.lineWidth;
+		paper.ctx.lineCap = (attr.lineCap||"square");
+
+		if(shape=="square" && attr.style.lineWidth > 1) attr.overflow = true; 
+
+		paper.ctx.beginPath();
+
+		cx = (attr.x||w/2);
+		cy = (attr.y||h/2);
+		dw = (attr.size-attr.style.lineWidth)/2;
+		
+		if(attr.style.lineWidth > 0) stroke = true;
+
+		if(shape=="circle"){
+			paper.ctx.arc(cx,cy,(dw || 4),0,Math.PI*2,false);
+			if(fill) paper.ctx.fill();
+			if(stroke) paper.ctx.stroke();
+		}
+
+		// https://vega.github.io/vega/docs/marks/symbol/
+		if(shape=="circle") path = 'm -'+(dw||4)+',0 a '+(dw||4)+' '+(dw||4)+' 0 1 0 '+((dw||4)*2)+' 0 a '+(dw||4)+' '+(dw||4)+' 0 1 0 -'+((dw||4)*2)+' 0';
+		else if(shape=="square") path = "m-0.5,0.5 l 1,0 0,-1 -1,0 Z";
+		else if(shape=="cross") path = "m-0.2,0.2 h -0.3 v -0.4 h 0.3 v -0.3 h 0.4 v 0.3 h 0.3 v 0.4 h-0.3 v 0.3 h -0.4Z";
+		else if(shape=="diamond") path = 'm0,0.5l0.5,-0.5 -0.5,-0.5 -0.5,0.5 Z';
+		else if(shape=="triangle-up" || shape=="triangle") path = 'm-0.5,0.4330127 l 1,0 -0.5,-0.8660254 Z';
+		else if(shape=="triangle-down") path = 'm-0.5,-0.4330127 l 1,0 -0.5,0.8660254 Z';
+		else if(shape=="triangle-right") path = 'm-0.4330127,0.5 l0,-1 0.8660254,0.5Z';
+		else if(shape=="triangle-left") path = 'm0.4330127,0.5 l0,-1 -0.8660254,0.5Z';
+		else if(shape=="arrow") path = 'm-0.1,0.5 l 0,-0.5 -0.15,0 0.25,-0.5 0.25,0.5 -0.15,0 0,0.5 Z';
+		else if(shape=="wedge") path = 'm-0.25,0.4330127 l 0.5,0 -0.25,-0.8660254 Z';
+		else if(shape=="stroke") path = 'm-0.5,0 l 1,0';
+		else if(shape=="stroke-vertical") path = 'm0,-0.5 l 0,1';
+		else if(shape=="hexagram") path = 'm-0.1666667,0.2886751 l 0.1666667,0.2886751 0.1666667,-0.2886751 0.333333,0 -0.1666667,-0.2886751 0.1666667,-0.2886751 -0.333333,0 -0.1666667,-0.2886751 -0.1666667,0.2886751 -0.333333,0 0.1666667,0.2886751 -0.1666667,0.2886751 Z';
+		else path = shape;
+
+		if(path[path.length-1]!="Z") fill = false;
+
+		path = (new Path(path));
+		path.setOrigin(cx,cy);
+
+		if(shape!="circle"){
+			path.setSize(attr.size);
+			path.draw(paper.ctx);
+			if(fill) paper.ctx.fill();
+			if(stroke) paper.ctx.stroke();
+			return;
+		}
+		if(attr.output == "texture") return paper.ctx.getImageData(0, 0, attr.size, attr.size);
+		else if(attr.output == "svg") return path.svg(attr);
+		else return paper.c;
+	}
 	/**
 	 * @desc Create a logger for console messages and timing
 	 * @param {boolean} inp.logging - do we log messages to the console?
