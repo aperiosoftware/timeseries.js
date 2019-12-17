@@ -767,7 +767,7 @@
 		var i,j,id,styles,layers,l,p,k,w,h,draw,d,key,keyitems,lookup,scale,ctx,c,parent,show,include;
 
 		// Build layer-toggle menu (submenu-layers)
-		layers = this.graph.canvas.container.find('.layers');
+		layers = this.graph.canvas.find('.layers');
 		// Remove any existing list items as we may have started from an incomplete list
 		layers.find('li').remove();
 
@@ -1030,7 +1030,7 @@
 		this.updateOptionsMenu();
 
 		// Update the DOM to show which is selected
-		el = g.canvas.container.find('.views');
+		el = g.canvas.find('.views');
 		lis = el.find('li');
 		for(m = 0; m < lis.length; m++){
 			li = S(lis[m]);
@@ -1052,8 +1052,8 @@
 		var i,l,el,id,li,active,alpha;
 		alpha = 'abcdefghijklmnopqrstuvwxyz';
 
-		el = this.graph.canvas.container.find('.views');
-		li = this.graph.canvas.container.find('.submenu-views');
+		el = this.graph.canvas.find('.views');
+		li = this.graph.canvas.find('.submenu-views');
 
 		// We need more than one view to exist to justify the view menu
 		if(this.json._views.length < 2){
@@ -1287,7 +1287,7 @@
 
 		// Function to call once the graph is drawn
 		function done(self){
-			this.graph.canvas.container.find('.loader').remove();
+			this.graph.canvas.find('.loader').remove();
 
 			// Build the menus
 			this.updateLayerMenu();

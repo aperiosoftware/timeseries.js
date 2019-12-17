@@ -209,106 +209,140 @@
 	 * @param {HTMLelement} container - the container to create a canvas within
 	 * @param {object} i - properties for the canvas
 	 * @param {boolean} i.logging - do we log to the console?
-	 * @param {string} i.background - the hex code to use for the background color
-	 * @param {string} i.color - the hex code to use for the foreground color
 	 * @param {number} i.width - the width of the canvas
 	 * @param {number} i.height - the height of the canvas
-	 * @param {boolean} i.fullwindow - is the canvas full screen?
-	 * @param {boolean} i.transparent - is the canvas transparent?
+	 * @param {boolean} i.fullscreen - is the canvas full screen?
+	 * @param {boolean} i.fullwindow - is the canvas full window?
 	 * @param {number} i.scale - how much to scale the pixels by
 	 */
 	function Canvas(container,i){
 
-		if(typeof container!=="object") return;
 		if(!i) i = {};
 
 		// Define default values
-		this.canvas = '';
-		this.c = '';
-		this.wide = 0;
-		this.tall = 0;
-		this.fullwindow = false;
-		this.fullscreen = false;
-		this.transparent = false;
-		this.color = "";
-		this.background = "rgb(255,255,255)";
-		this.events = {resize:""};	// Let's add some default events
-		this.logging = false;
-		this.scale = 1;
+		var wide = 0;
+		var tall = 0;
+		var fullwindow = false;
+		var fullscreen = false;
+		var events = {resize:""};	// Let's add some default events
+		var logging = false;
+		var logtime = false;
+		var scale = 1;
+		var threeD = true;
 
 		// Overwrite defaults with variables passed to the function
 		var n = "number";
 		var t = "string";
 		var b = "boolean";
-		if(is(i.logging,b)) this.logging = i.logging;
-		if(is(i.background,t)) this.background = i.background;
-		if(is(i.color,t)) this.color = i.color;
-		if(is(i.width,n)) this.wide = i.width;
-		if(is(i.height,n)) this.tall = i.height;
-		if(is(i.fullwindow,b)) this.fullwindow = i.fullwindow;
-		if(is(i.transparent,b)) this.transparent = i.transparent;
-		if(is(i.scale,n)) this.scale = i.scale;
+		if(is(i.logging,b)) logging = i.logging;
+		if(is(i.logtime,b)) logtime = i.logtime;
+		if(is(i.width,n)) wide = i.width;
+		if(is(i.height,n)) tall = i.height;
+		if(is(i.fullwindow,b)) fullwindow = i.fullwindow;
+		if(is(i.scale,n)) scale = i.scale;
+		if(is(i.threeD,b)) threeD = i.threeD;
 
-		this.log = new Logger({'id':'Canvas','logging':this.logging});
+		var log = new Logger({'id':'Canvas','logging':logging,'logtime':logtime});
 
-		this.log.message('Canvas',container,this.wide,this.tall);
-
-		// Construct the <canvas> container
-		this.container = S(container);
-		this.log.message('Container width',this.container.width(),this.container[0],container);
-
-		this.origcontainer = this.container[0].outerHTML;
-		if(this.container[0].nodeName!=="DIV") this.container = this.container.replaceWith('<div></div>');
-
-		if(this.container.length == 0){
-			this.log.error('No valid container provided');
+		if(typeof container!=="object"){
+			log.error('No container provided');
 			return;
 		}
-		this.container.css({'position':'relative','width':this.wide,'height':this.tall});
+
+		/**
+		 * @desc Function to find the canvas scale
+		 */
+		this.getScale = function(){ return scale; }
+
+		/**
+		 * @desc Function to find HTML elements
+		 */
+		this.find = function(str){ return container.find(str); }
+
+		this.getStyle = function(sty){ return getStyle(container[0],sty); }
+
+		/**
+		 * @desc Function to update the internal variables defining the width and height.
+		 */
+		this.setWH = function(w,h){
+			log.message('setWH',w,h);
+			if(!w || !h) return;
+			// Set virtual pixel scale
+			scale = window.devicePixelRatio;
+			for(var i = 0; i < canvas.length; i++){
+				canvas[i].width = w*scale;
+				canvas[i].height = h*scale;
+			}
+			wide = w;
+			tall = h;
+
+			// Normalize coordinate system to use css pixels.
+			if(this.ctx) this.ctx.twoD.scale(scale,scale);
+
+			// Set CSS size
+			this.holder.css({'width':w+'px','height':h+'px'});
+			canvas.css({'width':w+'px','height':h+'px'});
+		};
+
+		// Construct the <canvas> container
+		var container = S(container);
+		if(container[0].nodeName!=="DIV") container = container.replaceWith('<div></div>');
+		if(container.length == 0){
+			log.error('No valid container provided');
+			return;
+		}
+		container.css({'position':'relative','width':wide,'height':tall});
 		// We'll need to change the sizes when the window changes size
 		var _obj = this;
 		root.addEventListener('resize',function(e){ _obj.resize(); });
 
 		// If the Javascript function has been passed a width/height
 		// those take precedence over the CSS-set values
-		if(this.wide > 0) this.container.css({'width':this.wide+'px'});
-		this.wide = this.container.width();
-		if(this.tall > 0) this.container.css({'height':this.tall+'px'});
-		this.tall = this.container.height();
+		if(wide > 0) container.css({'width':wide+'px'});
+		wide = container.width();
+		if(tall > 0) container.css({'height':tall+'px'});
+		tall = container.height();
 
 		// Add a <canvas> to it
-		this.container.html('<div class="canvasholder"><canvas class="canvas" style="display:block;font:inherit;"></canvas></div>');
-		this.containerbg = this.container.css('background');
-		this.canvasholder = this.container.find('.canvasholder');
-		this.canvas = this.container.find('canvas');
-		this.canvasholder.css({'position':'relative'});
-		this.canvas.css({'position':'absolute'});
-		this.c = this.canvas[0];
+		container.html('<div class="canvasholder"><canvas class="canvas canvas-gl" style="display:block;font:inherit;"></canvas><canvas class="canvas canvas-2d" style="display:block;font:inherit;"></canvas></div>');
+		var containerbg = container.css('background');
+		this.holder = container.find('.canvasholder');
+		var canvas = container.find('canvas');
+		this.holder.css({'position':'relative'});
+		canvas.css({'position':'absolute'});
 
-		if(this.c && this.c.getContext){
-			this.ctx = this.c.getContext('2d');
-			this.setWH(this.wide,this.tall);
-			this.ctx.clearRect(0,0,this.wide*this.scale,this.tall*this.scale);
-			this.ctx.beginPath();
+		if(canvas && canvas[0].getContext){
+			this.ctx = {};
+
+			// Create the 2D canvas
+			this.ctx.twoD = canvas[1].getContext('2d');
+			this.setWH(wide,tall);
+			this.ctx.twoD.clearRect(0,0,wide*scale,tall*scale);
+			this.ctx.twoD.beginPath();
 			var fs = 16;
-			this.ctx.font = fs+"px sans-serif";
-			this.ctx.fillStyle = 'rgb(0,0,0)';
-			this.ctx.lineWidth = 1.5;
+			this.ctx.twoD.font = fs+"px sans-serif";
+			this.ctx.twoD.fillStyle = 'rgb(0,0,0)';
+			this.ctx.twoD.lineWidth = 1.5;
 			var loading = 'Loading graph...';
-			this.ctx.fillText(loading,(this.wide-this.ctx.measureText(loading).width)/2,(this.tall-fs)/2);
-			this.ctx.fill();
+			this.ctx.twoD.fillText(loading,(wide-this.ctx.twoD.measureText(loading).width)/2,(tall-fs)/2);
+			this.ctx.twoD.fill();
+
+			if(threeD){
+				// Create the 3D canvas
+				this.ctx.threeD = canvas[0].getContext("webgl",{ premultipliedAlpha: true });
+			}
 		}
 
 		// Bind events
-		this.canvas.on("mousedown",{me:this}, function(e){ e.data.me.trigger("mousedown",{event:e}); });
-		this.canvas.on("mousemove",{me:this}, function(e){ e.data.me.trigger("mousemove",{event:e}); });
-		this.canvas.on("mouseup",{me:this}, function(e){ e.data.me.trigger("mouseup",{event:e}); });
-		this.canvas.on("mouseover",{me:this}, function(e){ e.data.me.trigger("mouseover",{event:e}); });
-		this.canvas.on("mouseleave",{me:this}, function(e){ e.data.me.trigger("mouseleave",{event:e}); });
-		this.canvasholder.on("wheel",{me:this}, function(e){ e.data.me.trigger("wheel",{event:e}); });
+		canvas.on("mousedown",{me:this}, function(e){ e.data.me.trigger("mousedown",{event:e}); });
+		canvas.on("mousemove",{me:this}, function(e){ e.data.me.trigger("mousemove",{event:e}); });
+		canvas.on("mouseup",{me:this}, function(e){ e.data.me.trigger("mouseup",{event:e}); });
+		canvas.on("mouseover",{me:this}, function(e){ e.data.me.trigger("mouseover",{event:e}); });
+		canvas.on("mouseleave",{me:this}, function(e){ e.data.me.trigger("mouseleave",{event:e}); });
+		this.holder.on("wheel",{me:this}, function(e){ e.data.me.trigger("wheel",{event:e}); });
 		if('ontouchstart' in document.documentElement){
 			var olddist = null;
-			this.canvasholder.on("touchstart",{me:this}, function(e){
+			this.holder.on("touchstart",{me:this}, function(e){
 				var ev = e.originalEvent;
 				ev.preventDefault();
 				olddist = null;
@@ -322,7 +356,7 @@
 				}
 			});
 			var lastevent = null;
-			this.canvasholder.on("touchmove",{me:this}, function(e){
+			this.holder.on("touchmove",{me:this}, function(e){
 				e.originalEvent.preventDefault();
 				var g = e.data.me;
 				var touches = e.originalEvent.touches;
@@ -349,7 +383,7 @@
 					}
 				}
 			});
-			this.canvasholder.on("touchend",{me:this}, function(e){
+			this.holder.on("touchend",{me:this}, function(e){
 				var ev = e.originalEvent;
 				ev.preventDefault();
 				var touches = ev.touches;
@@ -364,146 +398,138 @@
 		}
 		if(fullScreenApi.supportsFullScreen){
 			document.addEventListener(fullScreenApi.fullScreenEventName, function(event){
-				_obj.fullscreen = (_obj.container[0] == fullScreenApi.element());
+				fullscreen = (container[0] == fullScreenApi.element());
 			});
 		}
+		
+		/**
+		 * @desc Attach a handler to an event for the Canvas object
+		 * @usage canvas.on(eventType[,eventData],handler(eventObject));
+		 * @usage canvas.on("resize",function(e){ console.log(e); });
+		 * @usage canvas.on("resize",{me:this},function(e){ console.log(e.data.me); });
+		 * @param {string} ev - the event type
+		 * @param {object} e - any properties to add to the output as e.data
+		 * @param {function} fn - a callback function
+		 */
+		this.on = function(ev,e,fn){
+			if(typeof ev!="string") return this;
+			if(is(fn,"undefined")){
+				fn = e;
+				e = {};
+			}else{
+				e = {data:e};
+			}
+			if(typeof e!="object" || typeof fn!="function") return this;
+			if(events[ev]) events[ev].push({e:e,fn:fn});
+			else events[ev] = [{e:e,fn:fn}];
+			return this;
+		}
+
+		/**
+		 * @desc Trigger a defined event with arguments. This is for internal-use to be sure to include the correct arguments for a particular event
+		 */
+		this.trigger = function(ev,args){
+			if(typeof ev != "string") return;
+			if(typeof args != "object") args = {};
+			var o = [];
+			if(typeof events[ev]=="object"){
+				for(var i = 0 ; i < events[ev].length ; i++){
+					var e = G.extend(events[ev][i].e,args);
+					if(typeof events[ev][i].fn == "function") o.push(events[ev][i].fn.call(this,e));
+				}
+			}
+			if(o.length > 0) return o;
+		};
+
+		var clipboard;
+		var clipboardData;
+		/**
+		 * @desc Copy to the <code>canvas</code> clipboard
+		 */
+		this.copyToClipboard = function(){
+			var x = Math.min(wide,this.ctx.twoD.canvas.clientWidth)*scale;
+			var y = Math.min(tall,this.ctx.twoD.canvas.clientHeight)*scale;
+			log.message('copyToClipboard',x,y,this);
+			if(x > 0 && y > 0){
+				clipboard = this.ctx.twoD.getImageData(0, 0, x, y);
+				clipboardData = clipboard.data;
+			}
+			return this;
+		};
+
+		/**
+		 * @desc Paste from the <code>canvas</code> clipboard onto the canvas
+		 */
+		this.pasteFromClipboard = function(){
+			if(clipboardData){
+				clipboard.data = clipboardData;
+				this.ctx.twoD.putImageData(clipboard, 0, 0);
+			}
+			return this;
+		};
+
+		/**
+		 * @desc Will toggle the <code>canvas</code> as a full screen element if the browser supports it.
+		 */
+		this.toggleFullScreen = function(){
+			log.message('toggleFullScreen',fullscreen);
+			this.elem = container[0];
+
+			if(fullscreen){
+				if(document.exitFullscreen) document.exitFullscreen();
+				else if(document.mozCancelFullScreen) document.mozCancelFullScreen();
+				else if(document.webkitCancelFullScreen) document.webkitCancelFullScreen();
+			}else{
+				if(this.elem.requestFullscreen) this.elem.requestFullscreen();
+				else if(this.elem.mozRequestFullScreen) this.elem.mozRequestFullScreen();
+				else if(this.elem.webkitRequestFullscreen) this.elem.webkitRequestFullscreen();
+				else if(this.elem.msRequestFullscreen) this.elem.msRequestFullscreen();
+			}
+			fullscreen = !fullscreen;
+			return this;
+		};
+
+		/**
+		 * @desc A function to be called whenever the <code>canvas</code> needs to be resized.
+		 * @usage canvas.resize()
+		 * @usage canvas.resize(400,250)
+		 */
+		this.resize = function(w,h){
+			if(!canvas) return;
+			if(!w || !h){
+				if(fullscreen) container.css({'background':'white'});
+				else container.css({'background':containerbg});
+
+				// We have to zap the width of the canvas to let it take the width of the container
+				canvas.css({'width':'','height':'','max-width':'100%'});
+				if(fullwindow){
+					w = window.outerWidth;
+					h = window.outerHeight;
+					S(document).css({'width':w+'px','height':h+'px'});
+				}else{
+					// Set a max-width so that it can shrink
+					container.css({'max-width':'100%'});
+					w = container.outerWidth();
+					h = container.outerHeight();
+				}
+			}
+			if(w == wide && h == tall) return;
+			this.setWH(w,h);
+			// Trigger callback
+			this.trigger("resize",{w:w,h:h});
+		};
+
+		this.width = function(str){
+			return (str=="container") ? container.outerWidth() : wide;
+		}
+
+		this.height = function(str){
+			return (str=="container") ? container.outerHeight() : tall;
+		}
+
+		return this;
 	}
 
-	/**
-	 * @desc Attach a handler to an event for the Canvas object
-	 * @usage canvas.on(eventType[,eventData],handler(eventObject));
-	 * @usage canvas.on("resize",function(e){ console.log(e); });
-	 * @usage canvas.on("resize",{me:this},function(e){ console.log(e.data.me); });
-	 * @param {string} ev - the event type
-	 * @param {object} e - any properties to add to the output as e.data
-	 * @param {function} fn - a callback function
-	 */
-	Canvas.prototype.on = function(ev,e,fn){
-		if(typeof ev!="string") return this;
-		if(is(fn,"undefined")){
-			fn = e;
-			e = {};
-		}else{
-			e = {data:e};
-		}
-		if(typeof e!="object" || typeof fn!="function") return this;
-		if(this.events[ev]) this.events[ev].push({e:e,fn:fn});
-		else this.events[ev] = [{e:e,fn:fn}];
-		return this;
-	};
-
-	/**
-	 * @desc Trigger a defined event with arguments. This is for internal-use to be sure to include the correct arguments for a particular event
-	 */
-	Canvas.prototype.trigger = function(ev,args){
-		if(typeof ev != "string") return;
-		if(typeof args != "object") args = {};
-		var o = [];
-		if(typeof this.events[ev]=="object"){
-			for(var i = 0 ; i < this.events[ev].length ; i++){
-				var e = G.extend(this.events[ev][i].e,args);
-				if(typeof this.events[ev][i].fn == "function") o.push(this.events[ev][i].fn.call(this,e));
-			}
-		}
-		if(o.length > 0) return o;
-	};
-
-	/**
-	 * @desc Copy to the <code>canvas</code> clipboard
-	 */
-	Canvas.prototype.copyToClipboard = function(){
-		var x = Math.min(this.wide,this.ctx.canvas.clientWidth)*this.scale;
-		var y = Math.min(this.tall,this.ctx.canvas.clientHeight)*this.scale;
-		this.log.message('copyToClipboard',x,y,this);
-		if(x > 0 && y > 0){
-			this.clipboard = this.ctx.getImageData(0, 0, x, y);
-			this.clipboardData = this.clipboard.data;
-		}
-		return this;
-	};
-
-	/**
-	 * @desc Paste from the <code>canvas</code> clipboard onto the canvas
-	 */
-	Canvas.prototype.pasteFromClipboard = function(){
-		if(this.clipboardData){
-			this.clipboard.data = this.clipboardData;
-			this.ctx.putImageData(this.clipboard, 0, 0);
-		}
-		return this;
-	};
-
-	/**
-	 * @desc Will toggle the <code>canvas</code> as a full screen element if the browser supports it.
-	 */
-	Canvas.prototype.toggleFullScreen = function(){
-		this.log.message('toggleFullScreen',this.fullscreen);
-		this.elem = this.container[0];
-
-		if(this.fullscreen){
-			if(document.exitFullscreen) document.exitFullscreen();
-			else if(document.mozCancelFullScreen) document.mozCancelFullScreen();
-			else if(document.webkitCancelFullScreen) document.webkitCancelFullScreen();
-		}else{
-			if(this.elem.requestFullscreen) this.elem.requestFullscreen();
-			else if(this.elem.mozRequestFullScreen) this.elem.mozRequestFullScreen();
-			else if(this.elem.webkitRequestFullscreen) this.elem.webkitRequestFullscreen();
-			else if(this.elem.msRequestFullscreen) this.elem.msRequestFullscreen();
-		}
-		this.fullscreen = !this.fullscreen;
-		return this;
-	};
-
-	/**
-	 * @desc A function to be called whenever the <code>canvas</code> needs to be resized.
-	 * @usage canvas.resize()
-	 * @usage canvas.resize(400,250)
-	 */
-	Canvas.prototype.resize = function(w,h){
-		if(!this.canvas) return;
-		if(!w || !h){
-			if(this.fullscreen) this.container.css({'background':'white'});
-			else this.container.css({'background':this.containerbg});
-
-			// We have to zap the width of the canvas to let it take the width of the container
-			this.canvas.css({'width':'','height':'','max-width':'100%'});
-			if(this.fullwindow){
-				w = window.outerWidth;
-				h = window.outerHeight;
-				S(document).css({'width':w+'px','height':h+'px'});
-			}else{
-				// Set a max-width so that it can shrink
-				this.container.css({'max-width':'100%'});
-				w = this.container.outerWidth();
-				h = this.container.outerHeight();
-			}
-		}
-		if(w == this.wide && h == this.tall) return;
-		this.setWH(w,h);
-		// Trigger callback
-		this.trigger("resize",{w:w,h:h});
-	};
-
-	/**
-	 * @desc Internal function to update the internal variables defining the width and height.
-	 */
-	Canvas.prototype.setWH = function(w,h,ctx){
-		this.log.message('setWH',w,h);
-		if(!w || !h) return;
-		var c = (typeof ctx=="undefined") ? this.c : ctx;
-		// Set virtual pixel scale
-		this.scale = window.devicePixelRatio;
-		c.width = w*this.scale;
-		c.height = h*this.scale;
-		this.wide = w;
-		this.tall = h;
-
-		// Normalize coordinate system to use css pixels.
-		if(this.ctx) this.ctx.scale(this.scale, this.scale);
-
-		this.canvasholder.css({'width':w+'px','height':h+'px'});
-		this.canvas.css({'width':w+'px','height':h+'px'});
-	};
 
 	/**
 	 * @desc Function for making a graph object
@@ -516,7 +542,7 @@
 		if(!options) options = {};
 
 		// Define some variables
-		this.version = "0.3.7";
+		this.version = "0.4.0";
 		if(typeof element!="object") return;
 		this.marks = {};
 		this.chart = {};
@@ -565,11 +591,11 @@
 		var s = window.devicePixelRatio;
 		// Set properties of the temporary canvases
 		for(var p in this.paper){
-			if(this.paper[p]) this.paper[p] = setWH(this.paper[p],this.canvas.wide,this.canvas.tall,s);
+			if(this.paper[p]) this.paper[p] = setWH(this.paper[p],this.canvas.width(),this.canvas.height(),s);
 		}
 
 		// Bind events to the canvas holder
-		this.canvas.canvasholder.on("mouseenter",function(ev){ disableScroll(); }).on("mouseleave",function(ev){ enableScroll(); });
+		this.canvas.holder.on("mouseenter",function(ev){ disableScroll(); }).on("mouseleave",function(ev){ enableScroll(); });
 
 		// Bind events to the canvas
 		this.canvas.on("resize",{me:this},function(ev){
@@ -579,10 +605,10 @@
 			var s = window.devicePixelRatio;
 			// Resize all the temporary canvases
 			for(var p in g.paper){
-				if(g.paper[p]) g.paper[p] = setWH(g.paper[p],g.canvas.wide,g.canvas.tall,s);
+				if(g.paper[p]) g.paper[p] = setWH(g.paper[p],g.canvas.width(),g.canvas.height(),s);
 			}
 			g.setOptions().defineAxis("x").setChartOffset().resetDataStyles().redraw({'update':true,'callback':function(){ this.trigger("resize",{event:ev.event}); }});
-			this.log.message("Total until end of resize:" + (new Date() - d) + "ms");
+			g.log.message("Total until end of resize:" + (new Date() - d) + "ms");
 		}).on("mousedown",{me:this},function(ev){
 			var event,g,x,y,s,d,t,ii,a,m,ds;
 			event = ev.event.originalEvent;
@@ -676,13 +702,13 @@
 					}
 					if(g.selecting){
 						g.canvas.pasteFromClipboard();
-						g.canvas.ctx.beginPath();
+						g.canvas.ctx.twoD.beginPath();
 						// Draw selection rectangle
-						g.canvas.ctx.fillStyle = g.options.grid.colorZoom || 'rgba(0,0,0,0.1)';
-						g.canvas.ctx.lineWidth = g.options.grid.border;
-						g.canvas.ctx.fillRect(from[0]-0.5,from[1]-0.5,to[0]-from[0],to[1]-from[1]);
-						g.canvas.ctx.fill();
-						g.canvas.ctx.closePath();
+						g.canvas.ctx.twoD.fillStyle = g.options.grid.colorZoom || 'rgba(0,0,0,0.1)';
+						g.canvas.ctx.twoD.lineWidth = g.options.grid.border;
+						g.canvas.ctx.twoD.fillRect(from[0]-0.5,from[1]-0.5,to[0]-from[0],to[1]-from[1]);
+						g.canvas.ctx.twoD.fill();
+						g.canvas.ctx.twoD.closePath();
 					}
 					if(g.panning) g.panBy(to[0]-from[0], to[1]-from[1], g.panoptions);
 				}
@@ -842,8 +868,8 @@
 		options = options || {};
 		if(typeof this.options!="object") this.options = {};
 		// Set the width and height
-		this.options.width = parseInt(getStyle(this.canvas.container[0], 'width'), 10);
-		this.options.height = parseInt(getStyle(this.canvas.container[0], 'height'), 10);
+		this.options.width = this.canvas.width('container');
+		this.options.height = this.canvas.height('container');
 
 		// Add user-defined options
 		//this.options = Object.assign(this.options, options);
@@ -1195,7 +1221,7 @@
 			this.clear();
 			this.clear(this.paper.temp.ctx);
 			this.drawAxes();
-			var ctx = this.canvas.ctx;
+			var ctx = this.canvas.ctx.twoD;
 			// Build the clip path
 			ctx.save();
 			ctx.beginPath();
@@ -1242,11 +1268,11 @@
 				// Scale the top left location
 				this.paper.data.scale.x *= sx;
 				this.paper.data.scale.y *= sy;
-				var nwide = Math.round(this.canvas.wide/this.paper.data.scale.x);
-				var ntall = Math.round(this.canvas.tall/this.paper.data.scale.y);
+				var nwide = Math.round(this.canvas.width()/this.paper.data.scale.x);
+				var ntall = Math.round(this.canvas.height()/this.paper.data.scale.y);
 				// We use x,y below to draw the scaled image
-				x = pos[0] * (1 - nwide/this.canvas.wide);
-				y = pos[1] * (1 - ntall/this.canvas.tall);
+				x = pos[0] * (1 - nwide/this.canvas.width());
+				y = pos[1] * (1 - ntall/this.canvas.height());
 			}
 			// Find the center
 			c = this.pixel2data(pos[0],pos[1]);
@@ -1290,13 +1316,13 @@
 			this.clear();
 			this.clear(this.paper.temp.ctx);
 			this.drawAxes();
-			var ctx = this.canvas.ctx;
+			var ctx = this.canvas.ctx.twoD;
 			// Build the clip path
 			ctx.save();
 			ctx.beginPath();
 			ctx.rect(this.chart.left,this.chart.top,this.chart.width,this.chart.height);
 			ctx.clip();
-			ctx.drawImage(this.paper.data.c,x,y,Math.round(this.canvas.wide/this.paper.data.scale.x),Math.round(this.canvas.tall/this.paper.data.scale.y));
+			ctx.drawImage(this.paper.data.c,x,y,Math.round(this.canvas.width()/this.paper.data.scale.x),Math.round(this.canvas.height()/this.paper.data.scale.y));
 			ctx.restore();
 			this.finishDraw(true);
 		}
@@ -1422,11 +1448,11 @@
 	 * @param {number} y - vertical pixel value
 	 */
 	Graph.prototype.dataAtMousePosition = function(x,y){
-		x = Math.round(x*this.canvas.scale);
-		y = Math.round(y*this.canvas.scale);
+		x = Math.round(x*this.canvas.getScale());
+		y = Math.round(y*this.canvas.getScale());
 		var rtn = [];
 		if(this.picker) rtn = this.picker.getMatches(this.marks,{'screen':{'x':x,'y':y},'data':this.pixel2data(x,y)},2);
-		if(rtn.length<1) this.canvas.canvas.css({'cursor':''});
+		if(rtn.length<1) this.canvas.find('canvas').css({'cursor':''});
 		return rtn;
 	};
 
@@ -1476,7 +1502,7 @@
 			// We want to put the saved version of the canvas back
 			this.canvas.pasteFromClipboard();
 			var d,t,i,w,clipping,typ,mark,ctx,n,s,val,top,topmark,series;
-			ctx = this.canvas.ctx;
+			ctx = this.canvas.ctx.twoD;
 			top = -1;
 
 			// Only highlight the first 10 matches
@@ -1535,8 +1561,8 @@
 
 			var cls = 'graph-tooltip aas-series-'+t+' '+(this.options.tooltip && this.options.tooltip.theme ? this.options.tooltip.theme : "");
 			if(!this.coordinates){
-				this.canvas.canvasholder.append('<div class="'+cls+'" style="position:absolute;display:none;"></div>');
-				this.coordinates = this.canvas.container.find('.graph-tooltip');
+				this.canvas.holder.append('<div class="'+cls+'" style="position:absolute;display:none;"></div>');
+				this.coordinates = this.canvas.find('.graph-tooltip');
 			}
 			var html = "";
 
@@ -1554,7 +1580,7 @@
 			if(html){
 				var x,y,c;
 				this.coordinates.html(html);
-				x = topmark.props.x + this.canvas.c.offsetLeft;
+				x = topmark.props.x;// + this.canvas.c.offsetLeft;
 				y = topmark.props.y;
 				this.coordinates.css({'display':'block','left':Math.round(x)+'px','top':Math.round(y)+'px'});
 				c = (y < this.chart.height/3 ? 'n' : (y > this.chart.height*2/3 ? 's':''));
@@ -2027,8 +2053,8 @@
 	Graph.prototype.setChartOffset = function(){
 		if(typeof this.chart!="object") this.chart = {};
 		var fs,ff,o,c,a,ax,offx,dp,b;
-		fs = getStyle(this.canvas.container[0], 'font-size');
-		ff = getStyle(this.canvas.container[0], 'font-family');
+		fs = this.canvas.getStyle('font-size');
+		ff = this.canvas.getStyle('font-family');
 		o = this.options;
 		c = this.chart;
 		if(!c.left) c.left = 0;
@@ -2067,8 +2093,8 @@
 				c[ax[a]] = Math.round(c[ax[a]]);
 			}
 		}
-		c.width = this.canvas.wide-c.right-c.left;
-		c.height = this.canvas.tall-c.bottom-c.top;
+		c.width = this.canvas.width()-c.right-c.left;
+		c.height = this.canvas.height()-c.bottom-c.top;
 
 		this.chart = c;
 		return this;
@@ -2087,7 +2113,7 @@
 		// Set font for labels
 		fs = this.getFontHeight('y','label');
 		maxw = 0;
-		ctx = this.canvas.ctx;
+		ctx = this.canvas.ctx.twoD;
 		ctx.font = fs+'px '+this.chart.fontfamily;
 
 		if(this.y.ticks){
@@ -2105,7 +2131,7 @@
 	Graph.prototype.drawAxes = function(){
 		var tw,tickw,lw,c,ctx,rot,axes,r,i,j,k,a,o,d,s,p,mn,mx,fs,y1,y2,x1,x2,prec,axis,oldx,str,v,ii;
 		c = this.chart;
-		ctx = this.canvas.ctx;
+		ctx = this.canvas.ctx.twoD;
 		rot = Math.PI/2;
 		axes = {'xaxis':{},'yaxis':{}};
 		r = {
@@ -2125,7 +2151,7 @@
 		if(typeof this.background==="string"){
 			ctx.beginPath();
 			ctx.fillStyle = (this.background||"transparent");
-			ctx.rect(0,0,this.canvas.wide,this.canvas.tall);
+			ctx.rect(0,0,this.canvas.width(),this.canvas.height());
 			ctx.fill();
 			ctx.closePath();
 		}
@@ -2218,7 +2244,7 @@
 				if(o=="left" || o=="right") d = "y";
 
 				c = this.chart;
-				ctx = this.canvas.ctx;
+				ctx = this.canvas.ctx.twoD;
 
 				// Get axis properties
 				axis = this[d];
@@ -2538,7 +2564,7 @@
 		// Clear the data canvas
 		this.clear(this.paper.data.ctx);
 		this.paper.data.scale = {'x':1,'y':1};
-		ctx = this.canvas.ctx;
+		ctx = this.canvas.ctx.twoD;
 
 		for(sh in this.marks){
 			if(this.marks[sh].show && this.marks[sh].include){
@@ -2579,7 +2605,7 @@
 			}
 		}
 		// Draw the data canvas to the main canvas
-		try { this.canvas.ctx.drawImage(this.paper.data.c,0,0,this.paper.data.width,this.paper.data.height); }catch(e){ }
+		try { this.canvas.ctx.twoD.drawImage(this.paper.data.c,0,0,this.paper.data.width,this.paper.data.height); }catch(e){ }
 
 		return this;
 	};
@@ -2588,7 +2614,7 @@
 	 * @desc Remove the canvas from DOM
 	 */
 	Graph.prototype.remove = function(){
-		this.canvas.canvasholder.remove();
+		this.canvas.holder.remove();
 		return {};
 	};
 
@@ -2634,9 +2660,9 @@
 
 			// Bail out if it is outside the chart area
 			l = 0;
-			r = this.canvas.wide;
+			r = this.canvas.width();
 			t = 0;
-			b = this.canvas.tall;
+			b = this.canvas.height();
 			ok = false;
 			if((x2 >= l && x1 <= r) || (y1 >= b && y2 <= t) || (datum.props.x+dx > l && datum.props.x-dx < r) || (datum.props.y+dy > t && datum.props.y-dy < b)) ok = true;
 			if(!ok) return {};
@@ -2706,16 +2732,18 @@
 	 */
 	Graph.prototype.drawVisibleLineSegment = function(ax,ay,bx,by){
 		// If the two points are both off to the left, right, top, or bottom the line won't be visible
-		if((ax < 0 && bx < 0) || (ax > this.canvas.wide && bx > this.canvas.wide) || (ay < 0 && by < 0) || (ay > this.canvas.tall && by > this.canvas.tall)) return 0;
+		var w = this.canvas.width();
+		var h = this.canvas.height();
+		if((ax < 0 && bx < 0) || (ax > w && bx > w) || (ay < 0 && by < 0) || (ay > h && by > h)) return 0;
 		// Truncate left edge of the line
 		if(ax < 0){
 			ay = ay + (by-ay)*(Math.abs(ax)/(bx-ax));
 			ax = 0;
 		}
 		// Truncate right edge of the line
-		if(bx > this.canvas.wide){
-			by = ay + (by-ay)*((this.canvas.wide-ax)/(bx-ax));
-			bx = this.canvas.wide;
+		if(bx > w){
+			by = ay + (by-ay)*((w-ax)/(bx-ax));
+			bx = w;
 		}
 		// Truncate top edge of the line
 		if(ay < 0){
@@ -2723,9 +2751,9 @@
 			ay = 0;
 		}
 		// Truncate bottom edge of the line
-		if(by > this.canvas.tall){
-			bx = ax + (bx-ax)*((this.canvas.tall-ay)/(by-ay));
-			by = this.canvas.tall;
+		if(by > h){
+			bx = ax + (bx-ax)*((h-ay)/(by-ay));
+			by = h;
 		}
 		this.paper.temp.ctx.moveTo(ax,ay);
 		this.paper.temp.ctx.lineTo(bx,by);
@@ -2827,7 +2855,7 @@
 		if(!attr) attr = {};
 		var str,w,b,l,bits,f,fs,s,ctx,dy;
 
-		ctx = (attr.ctx||this.canvas.ctx);
+		ctx = (attr.ctx||this.canvas.ctx.twoD);
 		f = (attr.format || {});
 		if(!f.font) f.font = this.chart.fontfamily;
 		if(!f.fontSize) f.fontSize = this.chart.fontsize*this.fontscale;
@@ -2986,9 +3014,9 @@
 	 */
 	Graph.prototype.clear = function(ctx){
 		var w,h;
-		w = ctx ? ctx.canvas.width : this.canvas.wide;
-		h = ctx ? ctx.canvas.height : this.canvas.tall;
-		ctx = (ctx || this.canvas.ctx);
+		w = ctx ? ctx.canvas.width : this.canvas.width();
+		h = ctx ? ctx.canvas.height : this.canvas.height();
+		ctx = (ctx || this.canvas.ctx.twoD);
 		ctx.clearRect(0,0,w,h);
 		return this;
 	};
