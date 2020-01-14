@@ -954,15 +954,18 @@
 						g.canvas.layers.front.ctx.fill();
 						g.canvas.layers.front.ctx.closePath();
 					}
-					//if(g.panning) g.panBy(to[0]-from[0], to[1]-from[1], g.panoptions);
 					if(g.panning){
-						// Work out the new range
-						var dx = to[0]-from[0];
-						var dy = to[1]-from[1];
-						var r = g.getDataRange(g.chart.left-dx, g.chart.left+g.chart.width-dx, g.chart.top-dy, g.chart.top+g.chart.height-dy);
-						// Zoom to new range
-						g.zoom(r,{'update':true});
-						g.selectfrom = [x,y];
+						if(g.canvas.layers.threeD.ctx){
+							// Work out the new range
+							var dx = to[0]-from[0];
+							var dy = to[1]-from[1];
+							var r = g.getDataRange(g.chart.left-dx, g.chart.left+g.chart.width-dx, g.chart.top-dy, g.chart.top+g.chart.height-dy);
+							// Zoom to new range
+							g.zoom(r,{'update':true});
+							g.selectfrom = [x,y];
+						}else{
+							g.panBy(to[0]-from[0], to[1]-from[1], g.panoptions);
+						}
 					}
 				}
 			}
