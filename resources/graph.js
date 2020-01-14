@@ -533,14 +533,31 @@
 			for(var c = 0; c < canvas.length; c++){
 				l = canvas[c].getAttribute('data');
 				this.layers[l].canvas = canvas[c];
-				this.layers[l].ctx = canvas[c].getContext(this.layers[l].type);
 				if(this.layers[l].type=="2d"){
+					this.layers[l].ctx = canvas[c].getContext(this.layers[l].type);
 					this.layers[l].ctx.clearRect(0,0,wide*scale,tall*scale);
+					if(l=="front"){
+						this.layers[l].ctx.beginPath();
+						var fs = 16;
+						this.layers[l].ctx.font = fs+"px sans-serif";
+						this.layers[l].ctx.fillStyle = 'rgb(0,0,0)';
+						this.layers[l].ctx.lineWidth = 1.5;
+						var loading = 'Loading graph...';
+						this.layers[l].ctx.fillText(loading,(wide-this.layers[l].ctx.measureText(loading).width)/2,(tall-fs)/2);
+						this.layers[l].ctx.fill();
+					}
 				}else{
 					// Create the 3D canvas
 					try {
 						this.layers[l].canvas = canvas[c];
 						this.layers[l].ctx = canvas[c].getContext("webgl",{ premultipliedAlpha: true });
+					}catch(x){
+						this.layers[l].ctx = null;
+					}
+					if(!this.layers[l].ctx){
+						S(canvas[c]).remove();
+						delete this.layers[l].canvas;
+					}else{
 						function compileShader(ctx, typ, attr){
 							let type = (typ=="vertex") ? ctx.VERTEX_SHADER : ctx.FRAGMENT_SHADER;
 							let code = attr.src;
@@ -559,20 +576,7 @@
 							for(s in this.shaders[t]) this.shaders[t][s].shader = compileShader(this.layers[l].ctx, s, this.shaders[t][s]);
 						}
 						log.time("buildShaders");
-					}catch(x){
-						this.layers[l].ctx = null;
 					}
-
-				}
-				if(l=="front"){
-					this.layers[l].ctx.beginPath();
-					var fs = 16;
-					this.layers[l].ctx.font = fs+"px sans-serif";
-					this.layers[l].ctx.fillStyle = 'rgb(0,0,0)';
-					this.layers[l].ctx.lineWidth = 1.5;
-					var loading = 'Loading graph...';
-					this.layers[l].ctx.fillText(loading,(wide-this.layers[l].ctx.measureText(loading).width)/2,(tall-fs)/2);
-					this.layers[l].ctx.fill();	
 				}
 			}
 		}
@@ -1340,6 +1344,7 @@
 	
 		var i,s,st,t,a,attr,data,l,p,nt,mark;
 		
+		console.log(this.canvas.layers.threeD)
 		if(!this.canvas.layers.threeD.ctx){
 			this.log.warning('No 3D context exists yet for createLayers()');
 			return this;
@@ -3051,9 +3056,12 @@
 				}
 
 				// Draw lines
-				//if(this.marks[sh].type=="line") this.drawLine(sh,{'update':true});
-				//if(this.marks[sh].type=="rule") this.drawRule(sh,{'update':true});
-				//if(this.marks[sh].type=="area") this.drawArea(sh,{'update':true});
+				if(!this.canvas.layers.threeD.ctx){
+					// If we don't have a 3D context we just draw
+					if(this.marks[sh].type=="line") this.drawLine(sh,{'update':true});
+					if(this.marks[sh].type=="rule") this.drawRule(sh,{'update':true});
+					if(this.marks[sh].type=="area") this.drawArea(sh,{'update':true});
+				}
 				if(this.marks[sh].type=="symbol" || this.marks[sh].type=="rect" || this.marks[sh].type=="text"){
 					// Work out if we need to update these marks
 					update = (typeof this.marks[sh].hover==="function" && this.marks[sh].interactive);
@@ -3063,9 +3071,11 @@
 						m = this.marks[sh].mark[i];
 						p = m.props;
 						if(p.x && p.y){
-							//if(this.marks[sh].type=="symbol") this.drawShape(m,{'update':update});
-							//else 
-							//if(this.marks[sh].type=="rect") this.drawRect(m,{'update':update});
+							// If we don't have a 3D context we just draw
+							if(!this.canvas.layers.threeD.ctx){
+								if(this.marks[sh].type=="symbol") this.drawShape(m,{'update':update});
+								else if(this.marks[sh].type=="rect") this.drawRect(m,{'update':update});
+							}
 							if(this.marks[sh].type=="text") this.drawText(m,{'update':update});
 						}
 					}
