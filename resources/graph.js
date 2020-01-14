@@ -228,9 +228,6 @@
 		var logging = false;
 		var logtime = false;
 		var scale = 1;
-		var threeD = true;
-
-
 
 		// Overwrite defaults with variables passed to the function
 		var n = "number";
@@ -242,7 +239,6 @@
 		if(is(i.height,n)) tall = i.height;
 		if(is(i.fullwindow,b)) fullwindow = i.fullwindow;
 		if(is(i.scale,n)) scale = i.scale;
-		if(is(i.threeD,b)) threeD = i.threeD;
 
 		var log = new Logger({'id':'Canvas','logging':logging,'logtime':logtime});
 
@@ -553,11 +549,10 @@
 						this.layers[l].ctx = canvas[c].getContext("webgl",{ premultipliedAlpha: true });
 					}catch(x){
 						this.layers[l].ctx = null;
-					}
-					if(!this.layers[l].ctx){
 						S(canvas[c]).remove();
 						delete this.layers[l].canvas;
-					}else{
+					}
+					if(this.layers[l].ctx){
 						function compileShader(ctx, typ, attr){
 							let type = (typ=="vertex") ? ctx.VERTEX_SHADER : ctx.FRAGMENT_SHADER;
 							let code = attr.src;
@@ -1344,7 +1339,6 @@
 	
 		var i,s,st,t,a,attr,data,l,p,nt,mark;
 		
-		console.log(this.canvas.layers.threeD)
 		if(!this.canvas.layers.threeD.ctx){
 			this.log.warning('No 3D context exists yet for createLayers()');
 			return this;
