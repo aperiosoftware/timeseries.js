@@ -230,6 +230,8 @@
 		var scale = 1;
 		var threeD = true;
 
+
+
 		// Overwrite defaults with variables passed to the function
 		var n = "number";
 		var t = "string";
@@ -483,7 +485,7 @@
 			tall = h;
 
 			// Normalize coordinate system to use css pixels.
-			if(this.ctx) this.ctx.twoD.scale(scale,scale);
+			if(this.layers && this.layers.front.ctx) this.layers.front.ctx.scale(scale,scale);
 
 			// Set CSS size
 			this.holder.css({'width':w+'px','height':h+'px'});
@@ -509,52 +511,69 @@
 		if(tall > 0) container.css({'height':tall+'px'});
 		tall = container.height();
 
-		// Add a <canvas> to it
-		container.html('<div class="canvasholder"><canvas class="canvas canvas-2d" style="display:block;font:inherit;"></canvas><canvas class="canvas canvas-gl" style="display:block;font:inherit;"></canvas></div>');
+		this.layers = {'back':{'type':'2d'},'threeD':{'type':'webgl'},'front':{'type':'2d'}};
+
+		var str = '';
+		for(var l in this.layers){
+			if(this.layers[l]) str += '<canvas class="canvas canvas-'+this.layers[l].type+'" data="'+l+'" style="display:block;font:inherit;position:absolute;"></canvas>';
+		}
+		// Add each <canvas> to it
+		container.html('<div class="canvasholder">'+str+'</div>');
+
 		var containerbg = container.css('background');
 		this.holder = container.find('.canvasholder');
-		var canvas = container.find('canvas');
+		var canvas = container.find('.canvas');
+		
 		this.holder.css({'position':'relative'});
-		canvas.css({'position':'absolute'});
 
 		if(canvas && canvas[0].getContext){
-			this.ctx = {};
 
-			// Create the 2D canvas
-			this.ctx.twoD = canvas[1].getContext('2d');
 			this.setWH(wide,tall);
-			this.ctx.twoD.clearRect(0,0,wide*scale,tall*scale);
-			this.ctx.twoD.beginPath();
-			var fs = 16;
-			this.ctx.twoD.font = fs+"px sans-serif";
-			this.ctx.twoD.fillStyle = 'rgb(0,0,0)';
-			this.ctx.twoD.lineWidth = 1.5;
-			var loading = 'Loading graph...';
-			this.ctx.twoD.fillText(loading,(wide-this.ctx.twoD.measureText(loading).width)/2,(tall-fs)/2);
-			this.ctx.twoD.fill();
 
-			if(threeD){
-				// Create the 3D canvas
-				this.ctx.threeD = canvas[0].getContext("webgl",{ premultipliedAlpha: true });
+			for(var c = 0; c < canvas.length; c++){
+				l = canvas[c].getAttribute('data');
+				this.layers[l].canvas = canvas[c];
+				this.layers[l].ctx = canvas[c].getContext(this.layers[l].type);
+				if(this.layers[l].type=="2d"){
+					this.layers[l].ctx.clearRect(0,0,wide*scale,tall*scale);
+				}else{
+					// Create the 3D canvas
+					try {
+						this.layers[l].canvas = canvas[c];
+						this.layers[l].ctx = canvas[c].getContext("webgl",{ premultipliedAlpha: true });
+						function compileShader(ctx, typ, attr){
+							let type = (typ=="vertex") ? ctx.VERTEX_SHADER : ctx.FRAGMENT_SHADER;
+							let code = attr.src;
+							let shader = ctx.createShader(type);
+							ctx.shaderSource(shader, code+'');
+							ctx.compileShader(shader);
+							if(!ctx.getShaderParameter(shader, ctx.COMPILE_STATUS)) {
+								log.error(`Error compiling ${typ} shader:`);
+								log.message(ctx.getShaderInfoLog(shader));
+							}
+							return shader;
+						}
 
-				function compileShader(ctx, typ, attr){
-					let type = (typ=="vertex") ? ctx.VERTEX_SHADER : ctx.FRAGMENT_SHADER;
-					let code = attr.src;
-					let shader = ctx.createShader(type);
-					ctx.shaderSource(shader, code+'');
-					ctx.compileShader(shader);
-					if(!ctx.getShaderParameter(shader, ctx.COMPILE_STATUS)) {
-						log.error(`Error compiling ${typ} shader:`);
-						log.message(ctx.getShaderInfoLog(shader));
+						log.time("buildShaders");
+						for(t in this.shaders){
+							for(s in this.shaders[t]) this.shaders[t][s].shader = compileShader(this.layers[l].ctx, s, this.shaders[t][s]);
+						}
+						log.time("buildShaders");
+					}catch(x){
+						this.layers[l].ctx = null;
 					}
-					return shader;
-				}
 
-				log.time("buildShaders");
-				for(t in this.shaders){
-					for(s in this.shaders[t]) this.shaders[t][s].shader = compileShader(this.ctx.threeD, s, this.shaders[t][s]);
 				}
-				log.time("buildShaders");
+				if(l=="front"){
+					this.layers[l].ctx.beginPath();
+					var fs = 16;
+					this.layers[l].ctx.font = fs+"px sans-serif";
+					this.layers[l].ctx.fillStyle = 'rgb(0,0,0)';
+					this.layers[l].ctx.lineWidth = 1.5;
+					var loading = 'Loading graph...';
+					this.layers[l].ctx.fillText(loading,(wide-this.layers[l].ctx.measureText(loading).width)/2,(tall-fs)/2);
+					this.layers[l].ctx.fill();	
+				}
 			}
 		}
 
@@ -672,11 +691,11 @@
 		 * @desc Copy to the <code>canvas</code> clipboard
 		 */
 		this.copyToClipboard = function(){
-			var x = Math.min(wide,this.ctx.twoD.canvas.clientWidth)*scale;
-			var y = Math.min(tall,this.ctx.twoD.canvas.clientHeight)*scale;
+			var x = Math.min(wide,this.layers.front.ctx.canvas.clientWidth)*scale;
+			var y = Math.min(tall,this.layers.front.ctx.canvas.clientHeight)*scale;
 			log.message('copyToClipboard',x,y,this);
 			if(x > 0 && y > 0){
-				clipboard = this.ctx.twoD.getImageData(0, 0, x, y);
+				clipboard = this.layers.front.ctx.getImageData(0, 0, x, y);
 				clipboardData = clipboard.data;
 			}
 			return this;
@@ -688,7 +707,7 @@
 		this.pasteFromClipboard = function(){
 			if(clipboardData){
 				clipboard.data = clipboardData;
-				this.ctx.twoD.putImageData(clipboard, 0, 0);
+				this.layers.front.ctx.putImageData(clipboard, 0, 0);
 			}
 			return this;
 		};
@@ -928,13 +947,13 @@
 					}
 					if(g.selecting){
 						g.canvas.pasteFromClipboard();
-						g.canvas.ctx.twoD.beginPath();
+						g.canvas.layers.front.ctx.beginPath();
 						// Draw selection rectangle
-						g.canvas.ctx.twoD.fillStyle = g.options.grid.colorZoom || 'rgba(0,0,0,0.1)';
-						g.canvas.ctx.twoD.lineWidth = g.options.grid.border;
-						g.canvas.ctx.twoD.fillRect(from[0]-0.5,from[1]-0.5,to[0]-from[0],to[1]-from[1]);
-						g.canvas.ctx.twoD.fill();
-						g.canvas.ctx.twoD.closePath();
+						g.canvas.layers.front.ctx.fillStyle = g.options.grid.colorZoom || 'rgba(0,0,0,0.1)';
+						g.canvas.layers.front.ctx.lineWidth = g.options.grid.border;
+						g.canvas.layers.front.ctx.fillRect(from[0]-0.5,from[1]-0.5,to[0]-from[0],to[1]-from[1]);
+						g.canvas.layers.front.ctx.fill();
+						g.canvas.layers.front.ctx.closePath();
 					}
 					//if(g.panning) g.panBy(to[0]-from[0], to[1]-from[1], g.panoptions);
 					if(g.panning){
@@ -1321,7 +1340,7 @@
 	
 		var i,s,st,t,a,attr,data,l,p,nt,mark;
 		
-		if(!this.canvas.ctx.threeD){
+		if(!this.canvas.layers.threeD.ctx){
 			this.log.warning('No 3D context exists yet for createLayers()');
 			return this;
 		}
@@ -1449,40 +1468,40 @@
 					l.size = (attr && typeof attr.style.size==="number") ? attr.style.size : 10;
 					if(typeof primitives[p].color==="string") l.color = primitives[p].color;
 
-					l.program = this.canvas.ctx.threeD.createProgram();
+					l.program = this.canvas.layers.threeD.ctx.createProgram();
 					// Set the shaders
 					for(s in this.canvas.shaders[st]){
-						if(this.canvas.shaders[st][s].shader) this.canvas.ctx.threeD.attachShader(l.program, this.canvas.shaders[st][s].shader);
+						if(this.canvas.shaders[st][s].shader) this.canvas.layers.threeD.ctx.attachShader(l.program, this.canvas.shaders[st][s].shader);
 					}
-					this.canvas.ctx.threeD.linkProgram(l.program);
-					if(!this.canvas.ctx.threeD.getProgramParameter(l.program, this.canvas.ctx.threeD.LINK_STATUS)) {
+					this.canvas.layers.threeD.ctx.linkProgram(l.program);
+					if(!this.canvas.layers.threeD.ctx.getProgramParameter(l.program, this.canvas.layers.threeD.ctx.LINK_STATUS)) {
 						this.log.error("Error linking shader program:");
-						this.log.message(this.canvas.ctx.threeD.getProgramInfoLog(l.program));
+						this.log.message(this.canvas.layers.threeD.ctx.getProgramInfoLog(l.program));
 					}
 
 					// Get the uniform locations
-					l.loc = getProgramUniforms(this.canvas.ctx.threeD, l.program);
+					l.loc = getProgramUniforms(this.canvas.layers.threeD.ctx, l.program);
 
 					// Create the vertices using the appropriate function
 					l.vertex = primitives[p].fn.call(this,data,[(attr.style.group && attr.style.group=="width" ? 0 : this.x.data.min),(attr.style.group && attr.style.group=="height" ? 0 : this.y.data.min)]);
 
 					// Create a buffer and bind it
-					l.buffer = this.canvas.ctx.threeD.createBuffer();
-					this.canvas.ctx.threeD.bindBuffer(this.canvas.ctx.threeD.ARRAY_BUFFER, l.buffer);
+					l.buffer = this.canvas.layers.threeD.ctx.createBuffer();
+					this.canvas.layers.threeD.ctx.bindBuffer(this.canvas.layers.threeD.ctx.ARRAY_BUFFER, l.buffer);
 					// Set the buffer data
-					this.canvas.ctx.threeD.bufferData(this.canvas.ctx.threeD.ARRAY_BUFFER, l.vertex.data, this.canvas.ctx.threeD.STATIC_DRAW);
+					this.canvas.layers.threeD.ctx.bufferData(this.canvas.layers.threeD.ctx.ARRAY_BUFFER, l.vertex.data, this.canvas.layers.threeD.ctx.STATIC_DRAW);
 
 					// Unbind the buffer
-					this.canvas.ctx.threeD.bindBuffer(this.canvas.ctx.threeD.ARRAY_BUFFER, null);
+					this.canvas.layers.threeD.ctx.bindBuffer(this.canvas.layers.threeD.ctx.ARRAY_BUFFER, null);
 
 					// Create a buffer and bind it
-					l.bufferIndex = this.canvas.ctx.threeD.createBuffer();
-					this.canvas.ctx.threeD.bindBuffer(this.canvas.ctx.threeD.ARRAY_BUFFER, l.bufferIndex);
+					l.bufferIndex = this.canvas.layers.threeD.ctx.createBuffer();
+					this.canvas.layers.threeD.ctx.bindBuffer(this.canvas.layers.threeD.ctx.ARRAY_BUFFER, l.bufferIndex);
 					// Set the buffer data
-					this.canvas.ctx.threeD.bufferData(this.canvas.ctx.threeD.ARRAY_BUFFER, l.vertex.indices, this.canvas.ctx.threeD.STATIC_DRAW);
+					this.canvas.layers.threeD.ctx.bufferData(this.canvas.layers.threeD.ctx.ARRAY_BUFFER, l.vertex.indices, this.canvas.layers.threeD.ctx.STATIC_DRAW);
 
 					// Unbind the buffer
-					this.canvas.ctx.threeD.bindBuffer(this.canvas.ctx.threeD.ARRAY_BUFFER, null);
+					this.canvas.layers.threeD.ctx.bindBuffer(this.canvas.layers.threeD.ctx.ARRAY_BUFFER, null);
 
 					// Create sprite
 					if(l.shader=="sprite" || l.shader=="point"){
@@ -1491,15 +1510,15 @@
 					if(l.shader=="sprite"){
 						attr.output = "texture";
 						l.icon = Icon(l.shape||"circle",attr);
-						l.texture = this.canvas.ctx.threeD.createTexture();
-						this.canvas.ctx.threeD.activeTexture(this.canvas.ctx.threeD.TEXTURE0+this.threeD.layers.length);	// set an index for the texture
-						this.canvas.ctx.threeD.bindTexture(this.canvas.ctx.threeD.TEXTURE_2D, l.texture);
-						this.canvas.ctx.threeD.pixelStorei(this.canvas.ctx.threeD.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-						this.canvas.ctx.threeD.texParameteri(this.canvas.ctx.threeD.TEXTURE_2D, this.canvas.ctx.threeD.TEXTURE_MAG_FILTER, this.canvas.ctx.threeD.NEAREST);
-						this.canvas.ctx.threeD.texParameteri(this.canvas.ctx.threeD.TEXTURE_2D, this.canvas.ctx.threeD.TEXTURE_MIN_FILTER, this.canvas.ctx.threeD.NEAREST);
-						this.canvas.ctx.threeD.texParameteri(this.canvas.ctx.threeD.TEXTURE_2D, this.canvas.ctx.threeD.TEXTURE_WRAP_S, this.canvas.ctx.threeD.CLAMP_TO_EDGE);
-						this.canvas.ctx.threeD.texParameteri(this.canvas.ctx.threeD.TEXTURE_2D, this.canvas.ctx.threeD.TEXTURE_WRAP_T, this.canvas.ctx.threeD.CLAMP_TO_EDGE);
-						this.canvas.ctx.threeD.texImage2D(this.canvas.ctx.threeD.TEXTURE_2D, 0, this.canvas.ctx.threeD.RGBA, this.canvas.ctx.threeD.RGBA, this.canvas.ctx.threeD.UNSIGNED_BYTE, l.icon);
+						l.texture = this.canvas.layers.threeD.ctx.createTexture();
+						this.canvas.layers.threeD.ctx.activeTexture(this.canvas.layers.threeD.ctx.TEXTURE0+this.threeD.layers.length);	// set an index for the texture
+						this.canvas.layers.threeD.ctx.bindTexture(this.canvas.layers.threeD.ctx.TEXTURE_2D, l.texture);
+						this.canvas.layers.threeD.ctx.pixelStorei(this.canvas.layers.threeD.ctx.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+						this.canvas.layers.threeD.ctx.texParameteri(this.canvas.layers.threeD.ctx.TEXTURE_2D, this.canvas.layers.threeD.ctx.TEXTURE_MAG_FILTER, this.canvas.layers.threeD.ctx.NEAREST);
+						this.canvas.layers.threeD.ctx.texParameteri(this.canvas.layers.threeD.ctx.TEXTURE_2D, this.canvas.layers.threeD.ctx.TEXTURE_MIN_FILTER, this.canvas.layers.threeD.ctx.NEAREST);
+						this.canvas.layers.threeD.ctx.texParameteri(this.canvas.layers.threeD.ctx.TEXTURE_2D, this.canvas.layers.threeD.ctx.TEXTURE_WRAP_S, this.canvas.layers.threeD.ctx.CLAMP_TO_EDGE);
+						this.canvas.layers.threeD.ctx.texParameteri(this.canvas.layers.threeD.ctx.TEXTURE_2D, this.canvas.layers.threeD.ctx.TEXTURE_WRAP_T, this.canvas.layers.threeD.ctx.CLAMP_TO_EDGE);
+						this.canvas.layers.threeD.ctx.texImage2D(this.canvas.layers.threeD.ctx.TEXTURE_2D, 0, this.canvas.layers.threeD.ctx.RGBA, this.canvas.layers.threeD.ctx.RGBA, this.canvas.layers.threeD.ctx.UNSIGNED_BYTE, l.icon);
 					}
 
 					this.threeD.layers.push(l);
@@ -1663,7 +1682,7 @@
 			this.clear();
 			this.clear(this.paper.temp.ctx);
 			this.drawAxes();
-			var ctx = this.canvas.ctx.twoD;
+			var ctx = this.canvas.layers.front.ctx;
 			// Build the clip path
 			ctx.save();
 			ctx.beginPath();
@@ -1758,7 +1777,7 @@
 			this.clear();
 			this.clear(this.paper.temp.ctx);
 			this.drawAxes();
-			var ctx = this.canvas.ctx.twoD;
+			var ctx = this.canvas.layers.front.ctx;
 			// Build the clip path
 			ctx.save();
 			ctx.beginPath();
@@ -1953,7 +1972,7 @@
 			// We want to put the saved version of the canvas back
 			this.canvas.pasteFromClipboard();
 			var d,t,i,w,clipping,typ,mark,ctx,n,s,val,top,topmark,series;
-			ctx = this.canvas.ctx.twoD;
+			ctx = this.canvas.layers.front.ctx;
 			top = -1;
 
 			// Only highlight the first 10 matches
@@ -2564,7 +2583,7 @@
 		// Set font for labels
 		fs = this.getFontHeight('y','label');
 		maxw = 0;
-		ctx = this.canvas.ctx.twoD;
+		ctx = this.canvas.layers.back.ctx;
 		ctx.font = fs+'px '+this.chart.fontfamily;
 
 		if(this.y.ticks){
@@ -2582,7 +2601,7 @@
 	Graph.prototype.drawAxes = function(){
 		var tw,tickw,lw,c,ctx,rot,axes,r,i,j,k,a,o,d,s,p,mn,mx,fs,y1,y2,x1,x2,prec,axis,oldx,str,v,ii;
 		c = this.chart;
-		ctx = this.canvas.ctx.twoD;
+		ctx = this.canvas.layers.back.ctx;
 		rot = Math.PI/2;
 		axes = {'xaxis':{},'yaxis':{}};
 		r = {
@@ -2695,7 +2714,7 @@
 				if(o=="left" || o=="right") d = "y";
 
 				c = this.chart;
-				ctx = this.canvas.ctx.twoD;
+				//ctx = this.canvas.layers.back.ctx;
 
 				// Get axis properties
 				axis = this[d];
@@ -3015,7 +3034,7 @@
 		// Clear the data canvas
 		this.clear(this.paper.data.ctx);
 		this.paper.data.scale = {'x':1,'y':1};
-		ctx = this.canvas.ctx.twoD;
+		ctx = this.canvas.layers.front.ctx;
 
 		for(sh in this.marks){
 			if(this.marks[sh].show && this.marks[sh].include){
@@ -3057,11 +3076,11 @@
 			}
 		}
 		// Draw the data canvas to the main canvas
-		try { this.canvas.ctx.twoD.drawImage(this.paper.data.c,0,0,this.paper.data.width,this.paper.data.height); }catch(e){ }
+		try { this.canvas.layers.front.ctx.drawImage(this.paper.data.c,0,0,this.paper.data.width,this.paper.data.height); }catch(e){ }
 
 
 		// Now do the 3D layers
-		if(this.canvas.ctx.threeD){
+		if(this.canvas.layers.threeD.ctx){
 
 			this.log.message('draw3D');
 
@@ -3079,7 +3098,7 @@
 				}
 			}
 
-			var ctx = this.canvas.ctx.threeD;
+			var ctx = this.canvas.layers.threeD.ctx;
 			
 			this.threeD.viewPort = {'left':this.chart.left, 'top':this.chart.top, 'right':this.chart.right, 'bottom':this.chart.bottom};
 			this.threeD.currentScale = [this.x.range, this.y.range];
@@ -3418,7 +3437,7 @@
 		if(!attr) attr = {};
 		var str,w,b,l,bits,f,fs,s,ctx,dy;
 
-		ctx = (attr.ctx||this.canvas.ctx.twoD);
+		ctx = (attr.ctx||this.canvas.layers.front.ctx);
 		f = (attr.format || {});
 		if(!f.font) f.font = this.chart.fontfamily;
 		if(!f.fontSize) f.fontSize = this.chart.fontsize*this.fontscale;
@@ -3511,8 +3530,8 @@
 		var w,h;
 		w = ctx ? ctx.canvas.width : this.canvas.width();
 		h = ctx ? ctx.canvas.height : this.canvas.height();
-		ctx = (ctx || this.canvas.ctx.twoD);
-		ctx.clearRect(0,0,w,h);
+		(ctx || this.canvas.layers.front.ctx).clearRect(0,0,w,h);
+		(ctx || this.canvas.layers.back.ctx).clearRect(0,0,w,h);
 		return this;
 	};
 
