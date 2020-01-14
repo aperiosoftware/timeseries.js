@@ -280,11 +280,11 @@
 						gl_Position = vec4(posV, 0.1, 1);
 
 						// To do: send a boolean into the fragment shader to say if the point is highlighted or not
-						if(aVertexIndex == 8.0){
-							gl_PointSize = 0.0;
-						}else{
+						//if(aVertexIndex == 8.0){
+						//	gl_PointSize = 0.0;
+						//}else{
 							gl_PointSize = uPointSize;
-						}
+						//}
 					}`
 				},
 				'fragment':	{'src':`
@@ -510,7 +510,7 @@
 		tall = container.height();
 
 		// Add a <canvas> to it
-		container.html('<div class="canvasholder"><canvas class="canvas canvas-gl" style="display:block;font:inherit;"></canvas><canvas class="canvas canvas-2d" style="display:block;font:inherit;"></canvas></div>');
+		container.html('<div class="canvasholder"><canvas class="canvas canvas-2d" style="display:block;font:inherit;"></canvas><canvas class="canvas canvas-gl" style="display:block;font:inherit;"></canvas></div>');
 		var containerbg = container.css('background');
 		this.holder = container.find('.canvasholder');
 		var canvas = container.find('canvas');
@@ -3157,8 +3157,10 @@
 						ctx.bindBuffer(ctx.ARRAY_BUFFER, this.threeD.layers[n].bufferIndex);
 
 						aVertexIndex = ctx.getAttribLocation(this.threeD.layers[n].program, "aVertexIndex");
-						ctx.vertexAttribPointer(aVertexIndex, 1, ctx.FLOAT, false, 0, 0);
-						ctx.enableVertexAttribArray(aVertexIndex);
+						if(aVertexIndex >= 0){
+							ctx.vertexAttribPointer(aVertexIndex, 1, ctx.FLOAT, false, 0, 0);
+							ctx.enableVertexAttribArray(aVertexIndex);
+						}
 				
 						this.threeD.layers[n].inititated;
 					}
