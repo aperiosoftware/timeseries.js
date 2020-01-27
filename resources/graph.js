@@ -227,7 +227,7 @@
 		var events = {resize:""};	// Let's add some default events
 		var logging = false;
 		var logtime = false;
-		var scale = 1;
+		var scale = window.devicePixelRatio;
 
 		// Overwrite defaults with variables passed to the function
 		var n = "number";
@@ -468,20 +468,20 @@
 		/**
 		 * @desc Function to update the internal variables defining the width and height.
 		 */
-		this.setWH = function(w,h){
-			log.message('setWH',w,h);
+		this.setWH = function(w,h,s){
 			if(!w || !h) return;
-			// Set virtual pixel scale
-			scale = window.devicePixelRatio;
 			for(var i = 0; i < canvas.length; i++){
-				canvas[i].width = w*scale;
-				canvas[i].height = h*scale;
+				canvas[i].width = w*s;
+				canvas[i].height = h*s;
 			}
+			// Set local variables
 			wide = w;
 			tall = h;
+			scale = s;
 
 			// Normalize coordinate system to use css pixels.
-			if(this.layers && this.layers.front.ctx) this.layers.front.ctx.scale(scale,scale);
+			if(this.layers && this.layers.back.ctx) this.layers.back.ctx.scale(s,s);
+			if(this.layers && this.layers.front.ctx) this.layers.front.ctx.scale(s,s);
 
 			// Set CSS size
 			this.holder.css({'width':w+'px','height':h+'px'});
@@ -524,24 +524,12 @@
 
 		if(canvas && canvas[0].getContext){
 
-			this.setWH(wide,tall);
-
+			// Get the contexts
 			for(var c = 0; c < canvas.length; c++){
 				l = canvas[c].getAttribute('data');
 				this.layers[l].canvas = canvas[c];
 				if(this.layers[l].type=="2d"){
 					this.layers[l].ctx = canvas[c].getContext(this.layers[l].type);
-					this.layers[l].ctx.clearRect(0,0,wide*scale,tall*scale);
-					if(l=="front"){
-						this.layers[l].ctx.beginPath();
-						var fs = 16;
-						this.layers[l].ctx.font = fs+"px sans-serif";
-						this.layers[l].ctx.fillStyle = 'rgb(0,0,0)';
-						this.layers[l].ctx.lineWidth = 1.5;
-						var loading = 'Loading graph...';
-						this.layers[l].ctx.fillText(loading,(wide-this.layers[l].ctx.measureText(loading).width)/2,(tall-fs)/2);
-						this.layers[l].ctx.fill();
-					}
 				}else{
 					// Create the 3D canvas
 					try {
@@ -552,7 +540,28 @@
 						S(canvas[c]).remove();
 						delete this.layers[l].canvas;
 					}
-					if(this.layers[l].ctx){
+				}
+			}
+
+			this.setWH(wide,tall,scale);
+
+			for(var c = 0; c < canvas.length; c++){
+				l = canvas[c].getAttribute('data');
+				this.layers[l].canvas = canvas[c];
+				if(this.layers[l].ctx){
+					if(this.layers[l].type=="2d"){
+						this.layers[l].ctx.clearRect(0,0,wide*scale,tall*scale);
+						if(l=="front"){
+							this.layers[l].ctx.beginPath();
+							var fs = 16;
+							this.layers[l].ctx.font = fs+"px sans-serif";
+							this.layers[l].ctx.fillStyle = 'rgb(0,0,0)';
+							this.layers[l].ctx.lineWidth = 1.5;
+							var loading = 'Loading graph...';
+							this.layers[l].ctx.fillText(loading,(wide-this.layers[l].ctx.measureText(loading).width)/2,(tall-fs)/2);
+							this.layers[l].ctx.fill();
+						}
+					}else{
 						function compileShader(ctx, typ, attr){
 							let type = (typ=="vertex") ? ctx.VERTEX_SHADER : ctx.FRAGMENT_SHADER;
 							let code = attr.src;
@@ -898,24 +907,25 @@
 			a = g.trigger("clickpoint",{event:event,matches:m});
 			return true;
 		}).on("mousemove",{me:this},function(ev){
-			var event,g,x,y,d,t,ii,a,m,ds,p;
+			var event,g,x,y,d,t,ii,a,m,ds,p,scale;
 			event = ev.event.originalEvent;
 			if(!event) return;
 			g = ev.data.me;	// The graph object
 			if(g.updating) return;
 			g.updating = true;
-			x = event.layerX-2;	// There seems to be an offset which isn't obvious
-			y = event.layerY-2;
+			scale = (window.devicePixelRatio||1);
+			x = (event.layerX-2);	// There seems to be an offset which isn't obvious
+			y = (event.layerY-2);
 			// Attach hover event
 			if(!g.selecting && !g.panning && !g.timeout.wheel){
-				ds = g.dataAtMousePosition(x,y);
+				ds = g.dataAtMousePosition(x/scale,y/scale);
 				g.highlight(ds);
 				m = [];
 				for(var s = 0; s < ds.length; s++){
 					d = ds[s].split(":");
 					if(d && d.length == 2){
 						t = d[0];
-						ii = g.getPixPos(x,y);
+						ii = g.getPixPos(x/scale,y/scale);
 						p = {'series':t,'title':g.marks[t].title,'color':g.marks[t].color,'xpix':ii[0],'ypix':ii[1]};
 						if(d[1]!="*"){
 							p.n = parseInt(d[1]);
@@ -926,7 +936,7 @@
 				}
 				a = g.trigger("hoverpoint",{event:event,matches:m});
 				if(g.events.mousemove){
-					var pos = g.pixel2data(x,y);
+					var pos = g.pixel2data(x/scale,y/scale);
 					g.trigger("mousemove",{event:event,x:pos.x,y:pos.y});
 				}
 			}
@@ -957,8 +967,8 @@
 					if(g.panning){
 						if(g.canvas.layers.threeD.ctx){
 							// Work out the new range
-							var dx = to[0]-from[0];
-							var dy = to[1]-from[1];
+							var dx = (to[0]-from[0]);
+							var dy = (to[1]-from[1]);
 							var r = g.getDataRange(g.chart.left-dx, g.chart.left+g.chart.width-dx, g.chart.top-dy, g.chart.top+g.chart.height-dy);
 							// Zoom to new range
 							g.zoom(r,{'update':true});
@@ -1507,7 +1517,8 @@
 
 					// Create sprite
 					if(l.shader=="sprite" || l.shader=="point"){
-						attr.size = Math.sqrt(l.size);
+						attr.size = Math.sqrt(l.size)*window.devicePixelRatio;
+						attr.scale = 1;
 					}
 					if(l.shader=="sprite"){
 						attr.output = "texture";
@@ -3106,13 +3117,13 @@
 			}
 
 			var ctx = this.canvas.layers.threeD.ctx;
-			
+			var s = window.devicePixelRatio;
 			this.threeD.viewPort = {'left':this.chart.left, 'top':this.chart.top, 'right':this.chart.right, 'bottom':this.chart.bottom};
 			this.threeD.currentScale = [this.x.range, this.y.range];
 			this.threeD.currentTranslation = [this.x.min-this.x.data.min, this.y.min-this.y.data.min];
 
 			// Define the viewport area in pixels (x,y,w,h)
-			ctx.viewport(this.threeD.viewPort.left, this.threeD.viewPort.bottom, this.canvas.width()-this.threeD.viewPort.left-this.threeD.viewPort.right, this.canvas.height()-this.threeD.viewPort.top-this.threeD.viewPort.bottom);
+			ctx.viewport(this.threeD.viewPort.left*s, this.threeD.viewPort.bottom*s, (this.canvas.width()-this.threeD.viewPort.left-this.threeD.viewPort.right)*s, (this.canvas.height()-this.threeD.viewPort.top-this.threeD.viewPort.bottom)*s);
 			ctx.clearColor(0, 0, 0, 0);
 			ctx.clear(ctx.COLOR_BUFFER_BIT | ctx.DEPTH_BUFFER_BIT);
 			ctx.enable(ctx.BLEND);
@@ -3152,7 +3163,7 @@
 
 					if(this.threeD.layers[n].shader=="sprite"){
 						ctx.uniform1i(this.threeD.layers[n].loc.uTexture, n);
-						if(this.threeD.layers[n].size) ctx.uniform1f(this.threeD.layers[n].loc.uPointSize,this.threeD.layers[n].icon.width/window.devicePixelRatio);
+						if(this.threeD.layers[n].size) ctx.uniform1f(this.threeD.layers[n].loc.uPointSize,this.threeD.layers[n].icon.width);
 						ctx.activeTexture(ctx.TEXTURE0+n);	// this is the nth texture
 					}
 					if(this.threeD.layers[n].shader=="point"){
@@ -4249,17 +4260,18 @@
 		}
 		
 		if(!attr) attr = {};
-		var paper,w,h,cx,cy,dw,path,stroke,fill;
+		var paper,w,h,cx,cy,dw,path,stroke,fill,scale;
 		w = attr.width || attr.size;
 		h = attr.height || attr.size;
 		stroke = false;
 		fill = true;
+		scale = (attr.scale||window.devicePixelRatio);
 
 		if(attr.ctx){
 			paper = {'ctx':attr.ctx};
 		}else{
 			// Set properties of the temporary canvas
-			paper = setWH({ 'c': document.createElement('canvas') },w,h,window.devicePixelRatio);
+			paper = setWH({ 'c': document.createElement('canvas') },w,h,scale);
 			paper.ctx.clearRect(0,0,w,h);
 		}
 		if(!attr.style) attr.style = {};
