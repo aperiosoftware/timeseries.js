@@ -1349,7 +1349,7 @@
 	 * @param {number} idx - the index for this set of marks
 	 */
 	Graph.prototype.createLayers = function(){
-	
+
 		var i,s,st,t,a,attr,data,l,p,nt,mark;
 		
 		if(!this.canvas.layers.threeD.ctx){
@@ -1359,11 +1359,9 @@
 
 		this.log.message('createLayers',this.marks);
 
-
-		if(!this.threeD.layers){
-			this.threeD.layers = [];
-			this.threeD.layercounter = 0;
-		}
+		// Reset layers
+		this.threeD.layers = [];
+		this.threeD.layercounter = 0;
 
 		for(i in this.marks){
 
