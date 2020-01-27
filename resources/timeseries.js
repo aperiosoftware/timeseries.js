@@ -1180,9 +1180,6 @@
 
 		this.progress.datasets.old = this.progress.datasets.used;
 
-
-
-
 		for(id in this.datasets){
 			if(this.datasets[id] && !this.datasets[id].data) this.datasets[id].data = this.datasets[id].json;
 		}
@@ -1402,7 +1399,7 @@
 			}
 			opts.type = "image/png";
 			opts.file = (attr.file||"timeseries.png");
-			this.graph.canvas.c.toBlob(save,opts.type);
+			this.graph.screenshot().toBlob(save,opts.type);
 			if(attr){
 				this.graph.background = "";
 				this.graph.clear().drawAxes().resetDataStyles().drawData(false);

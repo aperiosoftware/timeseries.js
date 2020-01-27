@@ -3199,6 +3199,32 @@
 		return this;
 	};
 
+	Graph.prototype.screenshot = function(){
+
+		// Get the 3D canvas
+		var gl = this.canvas.layers.threeD;
+		var w = gl.canvas.clientWidth, h = gl.canvas.clientHeight;
+
+		// Construct a <canvas> to build on
+		var canvas = document.createElement('canvas');
+		var ctx = canvas.getContext('2d',{preserveDrawingBuffer: true});
+		// Set virtual pixel scale
+		var scale = window.devicePixelRatio;
+		canvas.width = w*scale;
+		canvas.height = h*scale;
+		ctx.clearRect(0,0,w,h);
+
+		// Update display
+		this.draw();
+
+		// Draw the layers
+		ctx.drawImage(this.canvas.layers.back.canvas, 0, 0);
+		ctx.drawImage(this.canvas.layers.threeD.canvas, 0, 0);
+		ctx.drawImage(this.canvas.layers.front.canvas, 0, 0);
+
+		return canvas;
+	}
+
 	/**
 	 * @desc Remove the canvas from DOM
 	 */
